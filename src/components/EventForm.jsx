@@ -1,6 +1,8 @@
 // src/components/EventForm.jsx
+
 import React, { useState, useEffect } from 'react'
 import * as calendarService from '../services/calendarService'
+import '../styles/calendario.css' // asume aquí están definidas las clases de formulario
 
 export default function EventForm({ evento, onCerrar, onGuardar, onEliminarLocal }) {
     const colorOptions = [
@@ -47,38 +49,32 @@ export default function EventForm({ evento, onCerrar, onGuardar, onEliminarLocal
         }
     }, [evento])
 
-    function handleChange(e) {
+    const handleChange = (e) => {
         const { name, value } = e.target
-        if (name === 'summary' || name === 'description' || name === 'location') {
+        if (['summary', 'description', 'location'].includes(name)) {
             setForm(f => ({ ...f, [name]: value }))
-        }
-        if (name === 'start') {
+        } else if (name === 'start') {
             setForm(f => ({ ...f, start: { ...f.start, dateTime: value } }))
-        }
-        if (name === 'end') {
+        } else if (name === 'end') {
             setForm(f => ({ ...f, end: { ...f.end, dateTime: value } }))
-        }
-        if (name === 'colorId') {
+        } else if (name === 'colorId') {
             setForm(f => ({ ...f, colorId: value }))
         }
     }
 
-    async function handleSubmit(e) {
+    const handleSubmit = async (e) => {
         e.preventDefault()
         try {
-            let resultado
-            if (evento) {
-                resultado = await calendarService.updateEvento(evento.id, form)
-            } else {
-                resultado = await calendarService.createEvento(form)
-            }
+            const resultado = evento
+                ? await calendarService.updateEvento(evento.id, form)
+                : await calendarService.createEvento(form)
             onGuardar(resultado)
         } catch (err) {
             console.error('Error guardando evento:', err)
         }
     }
 
-    async function handleEliminar() {
+    const handleEliminar = async () => {
         if (!evento) return
         try {
             await calendarService.deleteEvento(evento.id)
@@ -90,74 +86,74 @@ export default function EventForm({ evento, onCerrar, onGuardar, onEliminarLocal
     }
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <h3 className="text-xl font-semibold">
+        <form onSubmit={handleSubmit} className="modal-content">
+            <h3 className="text-xl font-semibold mb-4">
                 {evento ? 'Editar Evento' : 'Crear Evento'}
             </h3>
 
-            <div>
-                <label className="block font-medium">Título</label>
+            <div className="form-group">
+                <label>Título</label>
                 <input
                     name="summary"
                     value={form.summary}
                     onChange={handleChange}
                     required
-                    className="w-full border rounded p-2"
+                    className="form-input"
                 />
             </div>
 
-            <div>
-                <label className="block font-medium">Descripción</label>
+            <div className="form-group">
+                <label>Descripción</label>
                 <textarea
                     name="description"
                     value={form.description}
                     onChange={handleChange}
-                    className="w-full border rounded p-2"
+                    className="form-input"
                 />
             </div>
 
-            <div>
-                <label className="block font-medium">Lugar</label>
+            <div className="form-group">
+                <label>Lugar</label>
                 <input
                     name="location"
                     value={form.location}
                     onChange={handleChange}
-                    className="w-full border rounded p-2"
+                    className="form-input"
                 />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                    <label className="block font-medium">Inicio</label>
+            <div className="grid grid-cols-2 grid-gap-md">
+                <div className="form-group">
+                    <label>Inicio</label>
                     <input
                         type="datetime-local"
                         name="start"
                         value={form.start.dateTime}
                         onChange={handleChange}
                         required
-                        className="w-full border rounded p-2"
+                        className="form-input"
                     />
                 </div>
-                <div>
-                    <label className="block font-medium">Fin</label>
+                <div className="form-group">
+                    <label>Fin</label>
                     <input
                         type="datetime-local"
                         name="end"
                         value={form.end.dateTime}
                         onChange={handleChange}
                         required
-                        className="w-full border rounded p-2"
+                        className="form-input"
                     />
                 </div>
             </div>
 
-            <div>
-                <label className="block font-medium">Color</label>
+            <div className="form-group">
+                <label>Color</label>
                 <select
                     name="colorId"
                     value={form.colorId}
                     onChange={handleChange}
-                    className="w-full border rounded p-2"
+                    className="form-input"
                 >
                     {colorOptions.map(c => (
                         <option key={c.id} value={c.id}>
@@ -167,12 +163,12 @@ export default function EventForm({ evento, onCerrar, onGuardar, onEliminarLocal
                 </select>
             </div>
 
-            <div className="flex justify-end space-x-3">
+            <div className="form-actions">
                 {evento && (
                     <button
                         type="button"
                         onClick={handleEliminar}
-                        className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                        className="btn-eliminar"
                     >
                         Eliminar
                     </button>
@@ -180,13 +176,13 @@ export default function EventForm({ evento, onCerrar, onGuardar, onEliminarLocal
                 <button
                     type="button"
                     onClick={onCerrar}
-                    className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+                    className="btn-cancelar"
                 >
                     Cancelar
                 </button>
                 <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                    className="btn-guardar"
                 >
                     {evento ? 'Actualizar' : 'Crear'}
                 </button>
@@ -194,3 +190,4 @@ export default function EventForm({ evento, onCerrar, onGuardar, onEliminarLocal
         </form>
     )
 }
+

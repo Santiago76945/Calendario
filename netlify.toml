@@ -1,22 +1,26 @@
 # netlify.toml
 
 [dev]
-  # Usa tu script de dev para arrancar Vite
-  command   = "npm run dev"
-  # Puerto donde Netlify expondrá tu sitio (puede ser 8888)
-  port      = 8888
-  # Puerto donde corre realmente Vite (tú lo pusiste en vite.config.js)
+  command    = "npm run dev"
+  port       = 8888
   targetPort = 3000
-  # Indica que esto es un proyecto Vite
-  framework = "vite"
-  functions = "functions"
+  framework  = "vite"
+  functions  = "functions"
 
 [build]
   command   = "npm run build"
   publish   = "dist"
   functions = "functions"
 
+# 1) Fila de redirect para API—force asegura que NUNCA sirva index.html para /api/*
 [[redirects]]
   from   = "/api/*"
   to     = "/.netlify/functions/:splat"
+  status = 200
+  force  = true
+
+# 2) Catch-all para SPA: sólo después de /api/*
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
   status = 200

@@ -1,0 +1,93 @@
+/* src/styles/importexport.css */
+
+.importexport-container {
+    padding: 2rem;
+    background-color: #f5f5f5;
+    min-height: 100vh;
+}
+
+.importexport-header {
+    margin-bottom: 1.5rem;
+}
+
+.importexport-title {
+    font-size: 2rem;
+    color: #333;
+    margin: 0;
+}
+
+.importexport-textarea {
+    width: 100%;
+    height: 12rem;
+    padding: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 1rem;
+    resize: vertical;
+    margin-bottom: 1rem;
+}
+
+.importexport-button {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    background: #4a90e2;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    margin-bottom: 1.5rem;
+}
+
+.importexport-button:hover {
+    background: #357ab8;
+}
+
+.importexport-result {
+    margin-top: 1rem;
+}
+
+.result-section {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.result-section strong {
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.result-list {
+    list-style: disc;
+    margin-left: 1.5rem;
+    color: #333;
+}
+
+.error-text {
+    color: #c00;
+    margin-bottom: 1rem;
+}
+
+/* Asegurar que el contenedor no se agrande y centra la columna */
+.importexport-container {
+    margin: 0 auto;
+    box-sizing: border-box;
+}
+
+/* Hacer que el textarea respete el ancho del contenedor */
+.importexport-textarea {
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
+/* Aplicar box-sizing a botones y secciones de resultado */
+.importexport-button,
+.result-section {
+    box-sizing: border-box;
+    max-width: 100%;
+}

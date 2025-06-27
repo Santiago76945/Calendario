@@ -1,0 +1,84 @@
+/* src/styles/importexport-help.css */
+
+/* Fondo semitransparente que cubre toda la pantalla */
+.help-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+/* Contenedor principal del popup */
+.help-popup {
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 600px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    position: relative;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+/* Botón de cerrar en la esquina */
+.help-close-btn {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: transparent;
+    border: none;
+    font-size: 1.5rem;
+    color: #666;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.help-close-btn:hover {
+    color: #333;
+}
+
+/* Título del popup */
+.help-popup h3 {
+    margin-top: 0;
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+/* Párrafos explicativos */
+.help-popup p {
+    margin-bottom: 1rem;
+    line-height: 1.5;
+    color: #444;
+}
+
+/* Bloques de ejemplo JSON */
+.help-popup pre {
+    background: #f7f7f7;
+    padding: 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: monospace;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+/* Veñculos sin subrayado */
+.help-popup a {
+    color: #4a90e2;
+    text-decoration: none;
+}
+
+.help-popup a:hover {
+    text-decoration: underline;
+}
+
+/* Centrar título y primer párrafo */
+.help-popup h3,
+.help-popup p:first-of-type {
+    text-align: center;
+}

@@ -1,12 +1,17 @@
 // src/pages/ImportExport.jsx
+
 import React, { useState } from 'react'
+import { Link } from 'react-router-dom'
 import * as calendarService from '../services/calendarService'
+import '../styles/importexport.css'
+import '../styles/importexport-help.css'
 
 export default function ImportExport() {
     const [jsonInput, setJsonInput] = useState('')
     const [resultado, setResultado] = useState(null)
     const [errorParseo, setErrorParseo] = useState(null)
     const [importando, setImportando] = useState(false)
+    const [showHelp, setShowHelp] = useState(false)
 
     function validarEvento(obj) {
         if (!obj.summary || !obj.start?.dateTime || !obj.end?.dateTime) {
@@ -18,16 +23,16 @@ export default function ImportExport() {
     async function handleImportar() {
         setErrorParseo(null)
         setResultado(null)
-
         let parsed
+
         try {
             parsed = JSON.parse(jsonInput)
         } catch (err) {
             setErrorParseo('JSON inválido: ' + err.message)
             return
         }
-        const eventosArray = Array.isArray(parsed) ? parsed : [parsed]
 
+        const eventosArray = Array.isArray(parsed) ? parsed : [parsed]
         setImportando(true)
         const exitos = []
         const errores = []
@@ -52,54 +57,127 @@ export default function ImportExport() {
     }
 
     return (
-        <div className="p-6">
-            <header className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-semibold">Importar / Exportar Eventos</h2>
+        <div className="importexport-container">
+            <header className="importexport-header">
+                <h2 className="importexport-title">Importar / Exportar Eventos</h2>
             </header>
 
-            <div className="mb-4">
-                <textarea
-                    className="w-full h-48 p-2 border rounded"
-                    placeholder="Pega tu JSON aquí..."
-                    value={jsonInput}
-                    onChange={(e) => setJsonInput(e.target.value)}
-                />
+            <textarea
+                className="importexport-textarea"
+                placeholder="Pega tu JSON aquí..."
+                value={jsonInput}
+                onChange={(e) => setJsonInput(e.target.value)}
+            />
+
+            {errorParseo && <p className="error-text">{errorParseo}</p>}
+
+            <div className="importexport-actions">
+                <button
+                    className="importexport-button"
+                    disabled={importando}
+                    onClick={handleImportar}
+                >
+                    {importando ? 'Importando...' : 'Importar Eventos'}
+                </button>
+
+                <Link
+                    to="/"
+                    className="importexport-button"
+                    style={{ marginLeft: '0.5rem', textDecoration: 'none' }}
+                >
+                    Volver al menú
+                </Link>
+
+                <button
+                    className="importexport-button btn-help"
+                    style={{ marginLeft: '0.5rem' }}
+                    onClick={() => setShowHelp(true)}
+                >
+                    ?
+                </button>
             </div>
-            {errorParseo && <p className="text-red-500 mb-2">{errorParseo}</p>}
-            <button
-                className="px-4 py-2 bg-green-500 text-white rounded mb-6"
-                disabled={importando}
-                onClick={handleImportar}
-            >
-                {importando ? 'Importando...' : 'Importar Eventos'}
-            </button>
 
             {resultado && (
-                <div>
+                <div className="importexport-result">
                     {resultado.exitos.length > 0 && (
-                        <div className="mb-4 p-4 bg-blue-50 border rounded">
+                        <section className="result-section">
                             <strong>Éxitos:</strong>
-                            <ul className="list-disc pl-5">
+                            <ul className="result-list">
                                 {resultado.exitos.map((e) => (
                                     <li key={e.index}>
                                         Evento #{e.index + 1} creado con ID: {e.id}
                                     </li>
                                 ))}
                             </ul>
-                        </div>
+                        </section>
                     )}
                     {resultado.errores.length > 0 && (
-                        <div className="p-4 bg-red-50 border border-red-200 rounded">
+                        <section className="result-section">
                             <strong>Errores:</strong>
-                            <ul className="list-disc pl-5">
+                            <ul className="result-list">
                                 {resultado.errores.map((e) => (
                                     <li key={e.index}>
                                         Evento #{e.index + 1}: {e.mensaje}
                                     </li>
                                 ))}
                             </ul>
-                        </div>
+                        </section>
                     )}
+                </div>
+            )}
+
+            {showHelp && (
+                <div className="help-overlay">
+                    <div className="help-popup">
+                        <button
+                            className="help-close-btn"
+                            onClick={() => setShowHelp(false)}
+                            aria-label="Cerrar instrucciones"
+                        >
+                            ×
+                        </button>
+                        <h3>Instrucciones de Importación</h3>
+                        <p>Puedes importar uno o varios eventos en formato JSON. Ejemplos:</p>
+                        <pre>{`{
+  "summary": "Reunión con Cliente",
+  "description": "Revisar avances",
+  "location": "Zoom",
+  "start": {
+    "dateTime": "2025-07-10T14:00:00",
+    "timeZone": "America/Argentina/Cordoba"
+  },
+  "end": {
+    "dateTime": "2025-07-10T15:00:00",
+    "timeZone": "America/Argentina/Cordoba"
+  },
+  "reminders": {
+    "useDefault": false,
+    "overrides": [
+      { "method": "popup", "minutes": 30 }
+    ]
+  },
+  "colorId": "5"
+}`}</pre>
+                        <p>O para múltiples eventos:</p>
+                        <pre>{`[
+  {
+    "summary": "Evento A",
+    "start": {
+      "dateTime": "2025-07-11T09:00:00",
+      "timeZone": "America/Argentina/Cordoba"
+    },
+    "end": {
+      "dateTime": "2025-07-11T10:00:00",
+      "timeZone": "America/Argentina/Cordoba"
+    }
+  },
+  {
+    "summary": "Evento B",
+    "start": { "dateTime": "2025-07-12T11:00:00" },
+    "end": { "dateTime": "2025-07-12T12:30:00" }
+  }
+]`}</pre>
+                    </div>
                 </div>
             )}
         </div>

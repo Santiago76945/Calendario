@@ -1,0 +1,94 @@
+/* src/styles/auth-modal.css */
+
+/* Fondo semitransparente que cubre toda la pantalla */
+.auth-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3000;
+}
+
+/* Contenedor principal del modal de autenticación */
+.auth-modal {
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* centra hijos horizontalmente */
+    text-align: center;
+    /* centra el texto */
+}
+
+/* Título y texto */
+.auth-modal h2 {
+    margin-top: 0;
+    font-size: 1.5rem;
+    color: #333;
+}
+
+.auth-modal p {
+    margin-bottom: 1rem;
+    color: #555;
+}
+
+/* Formulario dentro del modal */
+.auth-modal form {
+    width: 100%;
+    max-width: 300px;
+    /* limita el ancho del formulario */
+    margin: 0 auto;
+    /* centra el form dentro del modal */
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    /* inputs ocupan todo el ancho */
+    text-align: left;
+    /* placeholder alineado a la izquierda */
+}
+
+/* Input de código */
+.auth-input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    /* separa del botón */
+    box-sizing: border-box;
+}
+
+/* Mensaje de error */
+.auth-error {
+    color: #c00;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+/* Botón de entrada */
+.auth-button {
+    padding: 0.75rem 1.5rem;
+    background: #4a90e2;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    align-self: center;
+    /* centra el botón dentro del form */
+    margin-top: 1rem;
+}
+
+.auth-button:hover {
+    background: #357ab8;
+}

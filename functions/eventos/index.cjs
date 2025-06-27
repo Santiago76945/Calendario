@@ -1,8 +1,9 @@
-// functions/eventos/index.js
+// functions/eventos/index.cjs
+
 const {
     obtenerEventos,
     crearEvento
-} = require('./googleCalendarService')
+} = require('./googleCalendarService.cjs')
 
 exports.handler = async function (event) {
     const headers = {
@@ -14,10 +15,18 @@ exports.handler = async function (event) {
     if (event.httpMethod === 'GET') {
         try {
             const items = await obtenerEventos()
-            return { statusCode: 200, headers, body: JSON.stringify(items) }
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify(items)
+            }
         } catch (err) {
             console.error(err)
-            return { statusCode: 500, headers, body: JSON.stringify({ error: 'Error al listar eventos' }) }
+            return {
+                statusCode: 500,
+                headers,
+                body: JSON.stringify({ error: 'Error al listar eventos' })
+            }
         }
     }
 
@@ -26,10 +35,18 @@ exports.handler = async function (event) {
         try {
             const data = JSON.parse(event.body)
             const nuevo = await crearEvento(data)
-            return { statusCode: 201, headers, body: JSON.stringify(nuevo) }
+            return {
+                statusCode: 201,
+                headers,
+                body: JSON.stringify(nuevo)
+            }
         } catch (err) {
             console.error(err)
-            return { statusCode: 500, headers, body: JSON.stringify({ error: 'Error al crear evento' }) }
+            return {
+                statusCode: 500,
+                headers,
+                body: JSON.stringify({ error: 'Error al crear evento' })
+            }
         }
     }
 

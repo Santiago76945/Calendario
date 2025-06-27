@@ -1,4 +1,5 @@
-// functions/eventos/googleCalendarService.js
+// functions/eventos/googleCalendarService.cjs
+
 const { google } = require('googleapis')
 
 const {

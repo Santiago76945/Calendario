@@ -1,8 +1,11 @@
 // src/pages/Calendario.jsx
+
 import React, { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import CalendarList from '../components/CalendarList'
 import EventForm from '../components/EventForm'
 import * as calendarService from '../services/calendarService'
+import '../styles/calendario.css'
 
 export default function Calendario() {
     const [eventos, setEventos] = useState([])
@@ -15,11 +18,11 @@ export default function Calendario() {
         setCargando(true)
         calendarService
             .getEventos()
-            .then((data) => {
+            .then(data => {
                 setEventos(data)
                 setError(null)
             })
-            .catch((err) => {
+            .catch(err => {
                 console.error(err)
                 setError('No se pudieron cargar los eventos.')
             })
@@ -28,68 +31,84 @@ export default function Calendario() {
             })
     }, [])
 
-    const handleGuardar = (evento) => {
-        const idx = eventos.findIndex((e) => e.id === evento.id)
-        if (idx !== -1) {
-            setEventos((prev) => {
-                const copy = [...prev]
-                copy[idx] = evento
-                return copy
+    function handleGuardar(evento) {
+        const indice = eventos.findIndex(e => e.id === evento.id)
+        if (indice !== -1) {
+            setEventos(prev => {
+                const copia = [...prev]
+                copia[indice] = evento
+                return copia
             })
         } else {
-            setEventos((prev) => [...prev, evento])
+            setEventos(prev => [...prev, evento])
         }
         setMostrarForm(false)
     }
 
-    const handleEliminarLocal = (id) => {
-        setEventos((prev) => prev.filter((e) => e.id !== id))
+    function handleEliminarLocal(id) {
+        setEventos(prev => prev.filter(e => e.id !== id))
+    }
+
+    function handleEliminar(id) {
+        calendarService
+            .deleteEvento(id)
+            .then(() => handleEliminarLocal(id))
+            .catch(err => console.error(err))
     }
 
     return (
-        <div className="p-6">
-            <header className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-semibold">Agenda de Eventos</h2>
-                <div>
-                    <button
-                        className="mr-4 px-4 py-2 bg-blue-500 text-white rounded"
-                        onClick={() => {
-                            setEventoEditar(null)
-                            setMostrarForm(true)
-                        }}
-                    >
-                        Añadir evento
-                    </button>
-                </div>
+        <div className="calendario-container">
+            <header className="calendario-header">
+                <h2 className="calendario-title">Agenda de Eventos</h2>
             </header>
 
-            {cargando && <p>Cargando eventos...</p>}
-            {error && <p className="text-red-500">{error}</p>}
-            {!cargando && !error && (
-                <CalendarList
-                    eventos={eventos}
-                    onEditar={(ev) => {
-                        setEventoEditar(ev)
+            <div className="crear-evento-wrapper">
+                <button
+                    className="btn-crear-evento"
+                    onClick={() => {
+                        setEventoEditar(null)
                         setMostrarForm(true)
                     }}
-                    onEliminar={(id) =>
-                        calendarService
-                            .deleteEvento(id)
-                            .then(() => handleEliminarLocal(id))
-                            .catch((err) => console.error(err))
-                    }
-                />
+                >
+                    Añadir evento
+                </button>
+                <Link to="/" className="btn-crear-evento" style={{ marginLeft: '0.5rem', textDecoration: 'none' }}>
+                    Volver al menú
+                </Link>
+            </div>
+
+            {cargando && <p className="calendario-loading">Cargando eventos...</p>}
+            {error && <p className="calendario-error">{error}</p>}
+
+            {!cargando && !error && (
+                <div className="calendario-list">
+                    <CalendarList
+                        eventos={eventos}
+                        onEditar={ev => {
+                            setEventoEditar(ev)
+                            setMostrarForm(true)
+                        }}
+                        onEliminar={handleEliminar}
+                    />
+                </div>
             )}
 
             {mostrarForm && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+                <div className="modal-overlay">
+                    <div className="modal-content">
                         <EventForm
                             evento={eventoEditar}
                             onCerrar={() => setMostrarForm(false)}
-                            onGuardar={(evt) => handleGuardar(evt)}
+                            onGuardar={handleGuardar}
                             onEliminarLocal={handleEliminarLocal}
                         />
+                        <button
+                            className="modal-close-btn"
+                            onClick={() => setMostrarForm(false)}
+                            aria-label="Cerrar modal"
+                        >
+                            ×
+                        </button>
                     </div>
                 </div>
             )}

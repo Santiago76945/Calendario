@@ -1,6 +1,6 @@
-// functions/eventos/update.cjs
+// functions/eventos/delete.cjs
 
-const { actualizarEvento } = require('./googleCalendarService.cjs')
+const { eliminarEvento } = require('./googleCalendarService.cjs')
 
 exports.handler = async function (event) {
     const headers = {
@@ -8,7 +8,7 @@ exports.handler = async function (event) {
         'Access-Control-Allow-Origin': '*'
     }
 
-    if (event.httpMethod !== 'PUT') {
+    if (event.httpMethod !== 'DELETE') {
         return {
             statusCode: 405,
             headers,
@@ -16,24 +16,22 @@ exports.handler = async function (event) {
         }
     }
 
-    // Extraer ID del path: /api/eventos/:id → event.path = "/api/eventos/abc"
     const parts = event.path.split('/')
     const id = parts[parts.length - 1]
 
     try {
-        const data = JSON.parse(event.body)
-        const actualizado = await actualizarEvento(id, data)
+        await eliminarEvento(id)
         return {
-            statusCode: 200,
+            statusCode: 204,
             headers,
-            body: JSON.stringify(actualizado)
+            body: ''
         }
     } catch (err) {
         console.error(err)
         return {
             statusCode: 500,
             headers,
-            body: JSON.stringify({ error: 'Error al actualizar evento' })
+            body: JSON.stringify({ error: 'Error al eliminar evento' })
         }
     }
 }
