@@ -1,0 +1,21 @@
+# netlify.toml
+
+[build]
+  command   = "npm run build"      # Genera el build de Vite en /dist
+  publish   = "dist"               # Directorio con los archivos estáticos
+  functions = "functions"          # Carpeta con tus Netlify Functions
+
+# Redirige todas las peticiones a /api/* hacia las funciones serverless
+[[redirects]]
+  from       = "/api/*"
+  to         = "/.netlify/functions/:splat"
+  status     = 200
+  force      = false
+  # preserve query params by default
+
+# Opcional: configurar headers para CORS si lo necesitas
+#[[headers]]
+#  for = "/api/*"
+#  [headers.values]
+#    Access-Control-Allow-Origin = "*"
+#    Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"

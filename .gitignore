@@ -1,0 +1,31 @@
+# Node modules
+node_modules/
+
+# Build output
+dist/
+
+# Netlify folder (si se genera)
+.netlify/
+
+# Environment variables
+.env
+.env.*           # por ejemplo .env.local, .env.production
+!.env.example    # si tienes un ejemplo para compartir
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Vite cache (opcional)
+.vite/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Generated lockfiles (si quisieras ignorar alguno)
+# package-lock.json
+# yarn.lock

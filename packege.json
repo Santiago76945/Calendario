@@ -1,0 +1,21 @@
+// package.json
+{
+  "name": "calendar-netlify",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "googleapis": "^149.0.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "netlify-cli": "^23.0.0"
+  }
+}
