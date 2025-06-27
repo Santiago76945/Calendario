@@ -1,21 +1,22 @@
 # netlify.toml
 
+[dev]
+  # Usa tu script de dev para arrancar Vite
+  command   = "npm run dev"
+  # Puerto donde Netlify expondrá tu sitio (puede ser 8888)
+  port      = 8888
+  # Puerto donde corre realmente Vite (tú lo pusiste en vite.config.js)
+  targetPort = 3000
+  # Indica que esto es un proyecto Vite
+  framework = "vite"
+  functions = "functions"
+
 [build]
-  command   = "npm run build"      # Genera el build de Vite en /dist
-  publish   = "dist"               # Directorio con los archivos estáticos
-  functions = "functions"          # Carpeta con tus Netlify Functions
+  command   = "npm run build"
+  publish   = "dist"
+  functions = "functions"
 
-# Redirige todas las peticiones a /api/* hacia las funciones serverless
 [[redirects]]
-  from       = "/api/*"
-  to         = "/.netlify/functions/:splat"
-  status     = 200
-  force      = false
-  # preserve query params by default
-
-# Opcional: configurar headers para CORS si lo necesitas
-#[[headers]]
-#  for = "/api/*"
-#  [headers.values]
-#    Access-Control-Allow-Origin = "*"
-#    Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
+  from   = "/api/*"
+  to     = "/.netlify/functions/:splat"
+  status = 200

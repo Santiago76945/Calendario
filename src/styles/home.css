@@ -1,0 +1,54 @@
+/* src/styles/home.css */
+
+.home-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+    background-color: #f5f5f5;
+}
+
+.home-title {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: #333;
+}
+
+.home-subtitle {
+    font-size: 1.25rem;
+    margin-bottom: 2rem;
+    color: #666;
+}
+
+.home-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+    width: 100%;
+    max-width: 800px;
+}
+
+.home-option {
+    display: block;
+    padding: 1.5rem;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    font-size: 1.125rem;
+    color: #333;
+    text-decoration: none;
+    transition: box-shadow 0.2s ease;
+}
+
+.home-option:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.home-footer {
+    font-size: 0.875rem;
+    color: #999;
+}

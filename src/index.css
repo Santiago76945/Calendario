@@ -1,10 +1,5 @@
 /* src/index.css */
-/* 1. Importa directivas de Tailwind */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* 2. Tus estilos globales adicionales */
+/* Estilos globales sin Tailwind */
 
 html,
 body {
@@ -13,13 +8,8 @@ body {
     font-family: 'Inter', sans-serif;
 }
 
-#root {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-}
-
-/* Ejemplo: Override de enlace */
+/* Ejemplo: estilo de enlaces */
 a {
-    @apply text-blue-600 hover:underline;
+    color: blue;
+    text-decoration: underline;
 }

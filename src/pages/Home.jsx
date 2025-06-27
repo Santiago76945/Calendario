@@ -1,31 +1,26 @@
 // src/pages/Home.jsx
-import React from 'react'
+
 import { Link } from 'react-router-dom'
+import '../styles/home.css'
 
 export default function Home() {
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen p-6">
-            <h1 className="text-4xl font-bold mb-4">Kalendario</h1>
-            <h2 className="text-lg text-gray-600 mb-8">
+        <div className="home-container">
+            <h1 className="home-title">Calendario</h1>
+            <h2 className="home-subtitle">
                 Una aplicación de Santiago Haspert
             </h2>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-12">
-                <Link
-                    to="/calendario"
-                    className="p-6 bg-white rounded-lg shadow hover:shadow-lg transition"
-                >
+            <div className="home-options">
+                <Link to="/calendario" className="home-option">
                     Ver calendario
                 </Link>
-                <Link
-                    to="/import-export"
-                    className="p-6 bg-white rounded-lg shadow hover:shadow-lg transition"
-                >
+                <Link to="/import-export" className="home-option">
                     Importar y exportar eventos
                 </Link>
             </div>
 
-            <footer className="text-sm text-gray-500">
+            <footer className="home-footer">
                 © 2025 Santiago Haspert. Prototipo de uso personal.
             </footer>
         </div>
