@@ -2,7 +2,8 @@
 
 const {
     obtenerEventos,
-    crearEvento
+    crearEvento,
+    OAuthRequiredError
 } = require('./googleCalendarService.cjs')
 
 exports.handler = async function (event) {
@@ -21,6 +22,13 @@ exports.handler = async function (event) {
                 body: JSON.stringify(items)
             }
         } catch (err) {
+            if (err instanceof OAuthRequiredError) {
+                return {
+                    statusCode: 401,
+                    headers,
+                    body: JSON.stringify({ error: err.message, oauthRequired: true })
+                }
+            }
             console.error(err)
             return {
                 statusCode: 500,
@@ -41,6 +49,13 @@ exports.handler = async function (event) {
                 body: JSON.stringify(nuevo)
             }
         } catch (err) {
+            if (err instanceof OAuthRequiredError) {
+                return {
+                    statusCode: 401,
+                    headers,
+                    body: JSON.stringify({ error: err.message, oauthRequired: true })
+                }
+            }
             console.error(err)
             return {
                 statusCode: 500,

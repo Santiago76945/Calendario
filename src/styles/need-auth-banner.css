@@ -1,0 +1,35 @@
+/* src/styles/need-auth-banner.css */
+
+.need-auth-banner {
+    background: #fff3cd;
+    border: 1px solid #ffeeba;
+    color: #856404;
+    padding: 1rem;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 500px;
+    margin: 1rem auto;
+    text-align: center;
+}
+
+.need-auth-message {
+    margin: 0 0 0.75rem 0;
+    font-size: 1rem;
+}
+
+.need-auth-button {
+    padding: 0.5rem 1rem;
+    background: #004085;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.need-auth-button:hover {
+    background: #003366;
+}
