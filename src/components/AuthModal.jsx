@@ -1,7 +1,7 @@
 // src/components/AuthModal.jsx
 
 import React, { useState } from 'react'
-import useAuth from '../hooks/useAuth'
+import { useAuth } from '../context/AuthContext'
 import '../styles/auth-modal.css'
 
 export default function AuthModal() {
@@ -15,6 +15,7 @@ export default function AuthModal() {
         if (!success) {
             setError('Código incorrecto. Intenta nuevamente.')
         }
+        // Si login() es true, AuthContext actualizará isAuthenticated y App ocultará este modal
     }
 
     return (
