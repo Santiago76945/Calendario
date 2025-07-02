@@ -6,25 +6,9 @@ const {
     GCAL_CLIENT_ID,
     GCAL_CLIENT_SECRET,
     GCAL_REDIRECT_URI,
-    GCAL_REFRESH_TOKEN,
     CALENDAR_ID = 'primary',
     TIMEZONE = 'America/Argentina/Cordoba'
 } = process.env
-
-// 1. Crear OAuth2Client
-const oAuth2Client = new google.auth.OAuth2(
-    GCAL_CLIENT_ID,
-    GCAL_CLIENT_SECRET,
-    GCAL_REDIRECT_URI
-)
-
-// 2. Si hay refresh token, lo seteamos
-if (GCAL_REFRESH_TOKEN) {
-    oAuth2Client.setCredentials({ refresh_token: GCAL_REFRESH_TOKEN })
-}
-
-// 3. Instanciar API Calendar
-const calendar = google.calendar({ version: 'v3', auth: oAuth2Client })
 
 /**
  * Error custom para indicar que se requiere nueva autorización OAuth
@@ -37,8 +21,34 @@ class OAuthRequiredError extends Error {
     }
 }
 
+/**
+ * Crea un OAuth2Client configurado con el refresh token dinámico
+ * @param {string} refreshToken
+ */
+function getOAuthClient(refreshToken) {
+    const oAuth2Client = new google.auth.OAuth2(
+        GCAL_CLIENT_ID,
+        GCAL_CLIENT_SECRET,
+        GCAL_REDIRECT_URI
+    )
+    if (refreshToken) {
+        oAuth2Client.setCredentials({ refresh_token: refreshToken })
+    }
+    return oAuth2Client
+}
+
+/**
+ * Instancia la API de Calendar para un refresh token dado
+ * @param {string} refreshToken
+ */
+function getCalendar(refreshToken) {
+    const auth = getOAuthClient(refreshToken)
+    return google.calendar({ version: 'v3', auth })
+}
+
 /** Obtiene hasta 50 eventos futuros */
-async function obtenerEventos() {
+async function obtenerEventos(refreshToken) {
+    const calendar = getCalendar(refreshToken)
     try {
         const res = await calendar.events.list({
             calendarId: CALENDAR_ID,
@@ -50,12 +60,11 @@ async function obtenerEventos() {
         })
         return res.data.items
     } catch (error) {
-        // Si no hay token o ha caducado, lanzamos OAuthRequiredError
         const reason =
             error?.errors?.[0]?.reason ||
             error?.response?.data?.error ||
             error.message
-        if (reason === 'invalid_grant' || !GCAL_REFRESH_TOKEN) {
+        if (reason === 'invalid_grant' || !refreshToken) {
             throw new OAuthRequiredError('Authorization required')
         }
         throw error
@@ -63,7 +72,8 @@ async function obtenerEventos() {
 }
 
 /** Crea un nuevo evento */
-async function crearEvento(data) {
+async function crearEvento(refreshToken, data) {
+    const calendar = getCalendar(refreshToken)
     try {
         const recurso = {
             summary: data.summary,
@@ -90,7 +100,7 @@ async function crearEvento(data) {
             error?.errors?.[0]?.reason ||
             error?.response?.data?.error ||
             error.message
-        if (reason === 'invalid_grant' || !GCAL_REFRESH_TOKEN) {
+        if (reason === 'invalid_grant' || !refreshToken) {
             throw new OAuthRequiredError('Authorization required')
         }
         throw error
@@ -98,7 +108,8 @@ async function crearEvento(data) {
 }
 
 /** Actualiza un evento existente */
-async function actualizarEvento(id, data) {
+async function actualizarEvento(refreshToken, id, data) {
+    const calendar = getCalendar(refreshToken)
     try {
         const recurso = {
             summary: data.summary,
@@ -126,7 +137,7 @@ async function actualizarEvento(id, data) {
             error?.errors?.[0]?.reason ||
             error?.response?.data?.error ||
             error.message
-        if (reason === 'invalid_grant' || !GCAL_REFRESH_TOKEN) {
+        if (reason === 'invalid_grant' || !refreshToken) {
             throw new OAuthRequiredError('Authorization required')
         }
         throw error
@@ -134,7 +145,8 @@ async function actualizarEvento(id, data) {
 }
 
 /** Elimina un evento por ID */
-async function eliminarEvento(id) {
+async function eliminarEvento(refreshToken, id) {
+    const calendar = getCalendar(refreshToken)
     try {
         await calendar.events.delete({
             calendarId: CALENDAR_ID,
@@ -145,7 +157,7 @@ async function eliminarEvento(id) {
             error?.errors?.[0]?.reason ||
             error?.response?.data?.error ||
             error.message
-        if (reason === 'invalid_grant' || !GCAL_REFRESH_TOKEN) {
+        if (reason === 'invalid_grant' || !refreshToken) {
             throw new OAuthRequiredError('Authorization required')
         }
         throw error

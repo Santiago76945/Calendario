@@ -1,13 +1,20 @@
 // functions/eventos/index.cjs
 
-const { obtenerEventos, crearEvento, actualizarEvento, eliminarEvento, OAuthRequiredError } = require('./googleCalendarService.cjs')
+const {
+    obtenerEventos,
+    crearEvento,
+    actualizarEvento,
+    eliminarEvento,
+    OAuthRequiredError
+} = require('./googleCalendarService.cjs')
 
 exports.handler = async function (event) {
     const headers = {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type'
+        // Permitimos el header personalizado para el refresh token
+        'Access-Control-Allow-Headers': 'Content-Type, X-Gcal-Refresh-Token'
     }
 
     // Preflight CORS
@@ -15,51 +22,74 @@ exports.handler = async function (event) {
         return { statusCode: 204, headers }
     }
 
-    // GET /api/eventos
-    if (event.httpMethod === 'GET') {
-        try {
-            const items = await obtenerEventos()
-            return { statusCode: 200, headers, body: JSON.stringify(items) }
-        } catch (err) { /* …igual que antes… */ }
-    }
+    // Recuperamos el token enviado desde el front
+    const refreshToken = event.headers['x-gcal-refresh-token'] || ''
 
-    // POST /api/eventos
-    if (event.httpMethod === 'POST') {
-        try {
-            const data = JSON.parse(event.body)
-            const nuevo = await crearEvento(data)
-            return { statusCode: 201, headers, body: JSON.stringify(nuevo) }
-        } catch (err) { /* …igual que antes… */ }
-    }
+    try {
+        // extraemos el ID si viene en la ruta /api/eventos/:id
+        const parts = event.path.split('/')
+        const id = parts[parts.length - 1]
 
-    // PUT /api/eventos/:id
-    if (event.httpMethod === 'PUT') {
-        try {
-            const parts = event.path.split('/')
-            const id = parts[parts.length - 1]
-            const data = JSON.parse(event.body)
-            const actualizado = await actualizarEvento(id, data)
-            return { statusCode: 200, headers, body: JSON.stringify(actualizado) }
-        } catch (err) { /* …igual que antes… */ }
-    }
+        switch (event.httpMethod) {
+            case 'GET': {
+                const items = await obtenerEventos(refreshToken)
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify(items)
+                }
+            }
 
-    // DELETE /api/eventos/:id
-    if (event.httpMethod === 'DELETE') {
-        try {
-            const parts = event.path.split('/')
-            const id = parts[parts.length - 1]
-            await eliminarEvento(id)
-            return { statusCode: 204, headers, body: '' }
-        } catch (err) {
-            console.error(err)
-            return { statusCode: 500, headers, body: JSON.stringify({ error: 'Error al eliminar evento' }) }
+            case 'POST': {
+                const data = JSON.parse(event.body)
+                const nuevo = await crearEvento(refreshToken, data)
+                return {
+                    statusCode: 201,
+                    headers,
+                    body: JSON.stringify(nuevo)
+                }
+            }
+
+            case 'PUT': {
+                const data = JSON.parse(event.body)
+                const actualizado = await actualizarEvento(refreshToken, id, data)
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify(actualizado)
+                }
+            }
+
+            case 'DELETE': {
+                await eliminarEvento(refreshToken, id)
+                return {
+                    statusCode: 204,
+                    headers,
+                    body: ''
+                }
+            }
+
+            default:
+                return {
+                    statusCode: 405,
+                    headers,
+                    body: JSON.stringify({ error: 'Método no permitido' })
+                }
         }
-    }
-
-    // Método no soportado
-    return {
-        statusCode: 405,
-        headers,
-        body: JSON.stringify({ error: 'Método no permitido' })
+    } catch (err) {
+        if (err instanceof OAuthRequiredError) {
+            // Indicamos al front que debe reiniciar el flujo de OAuth
+            return {
+                statusCode: 401,
+                headers,
+                body: JSON.stringify({ error: err.message, oauthRequired: true })
+            }
+        }
+        console.error(err)
+        return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ error: 'Error interno del servidor' })
+        }
     }
 }

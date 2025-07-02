@@ -24,7 +24,12 @@ export default function Calendario() {
             })
             .catch(err => {
                 console.error(err)
-                setError('No se pudieron cargar los eventos.')
+                if (err.message.toLowerCase().includes('unauthorized')) {
+                    // Token expirado o no autorizado: redirigimos al flujo OAuth
+                    window.location.href = '/.netlify/functions/oauth2-initiateAuth'
+                } else {
+                    setError('No se pudieron cargar los eventos.')
+                }
             })
             .finally(() => {
                 setCargando(false)
@@ -53,7 +58,12 @@ export default function Calendario() {
         calendarService
             .deleteEvento(id)
             .then(() => handleEliminarLocal(id))
-            .catch(err => console.error(err))
+            .catch(err => {
+                console.error(err)
+                if (err.message.toLowerCase().includes('unauthorized')) {
+                    window.location.href = '/.netlify/functions/oauth2-initiateAuth'
+                }
+            })
     }
 
     return (

@@ -12,13 +12,13 @@ export default defineConfig({
         react()
     ],
     server: {
-        // Puerto en el que correrá Vite
-        port: 3000,
+        // Cambiamos el puerto de 3000 a 3001 para evitar conflictos
+        port: 3001,
         strictPort: true,
         hmr: {
             protocol: 'ws',
             host: 'localhost',
-            port: 3000
+            port: 3001
         }
     },
     build: {

@@ -2,20 +2,43 @@
 
 const API_BASE = '/api/eventos'
 
-async function getEventos() {
-    const res = await fetch(API_BASE)
+/**
+ * Construye opciones de fetch incluyendo el refresh token desde localStorage
+ * @param {'GET'|'POST'|'PUT'|'DELETE'} method
+ * @param {string} url
+ * @param {object} [body]
+ */
+function withAuthOptions(method, url, body) {
+    const token = localStorage.getItem('gcal_refresh_token') || ''
+    const headers = {
+        'Content-Type': 'application/json',
+        'X-Gcal-Refresh-Token': token
+    }
+
+    const opts = { method, headers }
+    if (body) opts.body = JSON.stringify(body)
+    return fetch(url, opts)
+}
+
+export async function getEventos() {
+    const res = await withAuthOptions('GET', API_BASE)
+    if (res.status === 401) {
+        // Si el backend dice que necesita OAuth, redirigimos al flujo
+        window.location.href = '/.netlify/functions/oauth2-initiateAuth'
+        return new Promise(() => { }) // Promise que nunca resuelve
+    }
     if (!res.ok) {
         throw new Error(`Error ${res.status}: ${res.statusText}`)
     }
     return res.json()
 }
 
-async function createEvento(eventoData) {
-    const res = await fetch(API_BASE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(eventoData)
-    })
+export async function createEvento(eventoData) {
+    const res = await withAuthOptions('POST', API_BASE, eventoData)
+    if (res.status === 401) {
+        window.location.href = '/.netlify/functions/oauth2-initiateAuth'
+        return new Promise(() => { })
+    }
     if (!res.ok) {
         const text = await res.text().catch(() => res.statusText)
         throw new Error(`Error ${res.status}: ${text}`)
@@ -23,12 +46,12 @@ async function createEvento(eventoData) {
     return res.json()
 }
 
-async function updateEvento(id, eventoData) {
-    const res = await fetch(`${API_BASE}/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(eventoData)
-    })
+export async function updateEvento(id, eventoData) {
+    const res = await withAuthOptions('PUT', `${API_BASE}/${id}`, eventoData)
+    if (res.status === 401) {
+        window.location.href = '/.netlify/functions/oauth2-initiateAuth'
+        return new Promise(() => { })
+    }
     if (!res.ok) {
         const text = await res.text().catch(() => res.statusText)
         throw new Error(`Error ${res.status}: ${text}`)
@@ -36,20 +59,14 @@ async function updateEvento(id, eventoData) {
     return res.json()
 }
 
-async function deleteEvento(id) {
-    const res = await fetch(`${API_BASE}/${id}`, {
-        method: 'DELETE'
-    })
+export async function deleteEvento(id) {
+    const res = await withAuthOptions('DELETE', `${API_BASE}/${id}`)
+    if (res.status === 401) {
+        window.location.href = '/.netlify/functions/oauth2-initiateAuth'
+        return new Promise(() => { })
+    }
     if (!res.ok) {
         throw new Error(`Error ${res.status}: ${res.statusText}`)
     }
-    // DELETE devuelve 204, no hay JSON
     return true
-}
-
-export {
-    getEventos,
-    createEvento,
-    updateEvento,
-    deleteEvento
 }

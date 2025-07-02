@@ -1,9 +1,12 @@
 # netlify.toml
 
 [dev]
+  # Comando para levantar Vite en modo dev
   command    = "npm run dev"
+  # Puerto público que expondrá Netlify Dev
   port       = 8888
-  targetPort = 3000
+  # Puerto interno donde corre Vite (coincide con vite.config.js)
+  targetPort = 3001
   framework  = "vite"
   functions  = "functions"
 
@@ -12,14 +15,14 @@
   publish   = "dist"
   functions = "functions"
 
-# 1) Fila de redirect para API—force asegura que NUNCA sirva index.html para /api/*
+# Redirige /api/* a tus serverless functions
 [[redirects]]
   from   = "/api/*"
   to     = "/.netlify/functions/:splat"
   status = 200
   force  = true
 
-# 2) Catch-all para SPA: sólo después de /api/*
+# Catch-all para tu SPA
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
