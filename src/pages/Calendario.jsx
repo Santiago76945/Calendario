@@ -7,6 +7,7 @@ import EventForm from '../components/EventForm'
 import IcsPreview from '../components/IcsPreview'
 import AiEventComposer from '../components/AiEventComposer'
 import CalendarConnectionStatus from '../components/CalendarConnectionStatus'
+import BackButton from '../components/BackButton'
 import * as calendarService from '../services/calendarService'
 import {
     createIcsFromDraft,
@@ -351,6 +352,8 @@ export default function Calendario() {
 
     return (
         <div className="calendario-container">
+            <BackButton />
+
             <header className="calendario-header">
                 <div>
                     <h2 className="calendario-title">Agenda de eventos</h2>

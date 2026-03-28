@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react'
 import * as calendarService from '../services/calendarService'
 import { validateIcsContent } from '../services/icsService'
 import CalendarConnectionStatus from '../components/CalendarConnectionStatus'
+import BackButton from '../components/BackButton'
 import {
     getAssignedCalendar,
     hasAssignedCalendar,
@@ -90,6 +91,8 @@ export default function ImportExport() {
 
     return (
         <div className="importexport-container">
+            <BackButton />
+
             <header className="importexport-header">
                 <div>
                     <h2 className="importexport-title">Importar / Exportar eventos ICS</h2>
