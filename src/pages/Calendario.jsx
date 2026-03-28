@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import CalendarList from '../components/CalendarList'
+import CalendarPagination from '../components/CalendarPagination'
 import EventForm from '../components/EventForm'
 import IcsPreview from '../components/IcsPreview'
 import AiEventComposer from '../components/AiEventComposer'
@@ -23,6 +24,8 @@ const CREATION_MODES = {
     AI: 'ai'
 }
 
+const DEFAULT_PAGE_SIZE = 10
+
 export default function Calendario() {
     const [eventos, setEventos] = useState([])
     const [cargando, setCargando] = useState(true)
@@ -36,8 +39,15 @@ export default function Calendario() {
     const [draftActual, setDraftActual] = useState(null)
     const [icsPreview, setIcsPreview] = useState('')
     const [confirmando, setConfirmando] = useState(false)
+    const [modalError, setModalError] = useState('')
 
     const [connectionRefreshKey, setConnectionRefreshKey] = useState(0)
+
+    const [currentPage, setCurrentPage] = useState(1)
+    const [pageSize] = useState(DEFAULT_PAGE_SIZE)
+    const [pageTokensByPage, setPageTokensByPage] = useState({ 1: '' })
+    const [hasNextPage, setHasNextPage] = useState(false)
+    const [totalKnownPages, setTotalKnownPages] = useState(1)
 
     const sessionActive = isGoogleSessionActive()
     const assignedCalendar = getAssignedCalendar()
@@ -46,20 +56,90 @@ export default function Calendario() {
     useEffect(() => {
         if (!readyToUseCalendar) {
             setEventos([])
+            setCurrentPage(1)
+            setPageTokensByPage({ 1: '' })
+            setHasNextPage(false)
+            setTotalKnownPages(1)
             setCargando(false)
             return
         }
 
-        loadEventos()
-    }, [connectionRefreshKey])
+        resetPaginationState()
+        loadEventos(1, {
+            pageTokenOverride: '',
+            replaceKnownTokens: true
+        })
+    }, [connectionRefreshKey, readyToUseCalendar])
 
-    async function loadEventos() {
+    function resetPaginationState() {
+        setCurrentPage(1)
+        setPageTokensByPage({ 1: '' })
+        setHasNextPage(false)
+        setTotalKnownPages(1)
+    }
+
+    async function loadEventos(
+        targetPage = 1,
+        options = {}
+    ) {
+        const {
+            pageTokenOverride,
+            replaceKnownTokens = false
+        } = options
+
+        const safeTargetPage = Math.max(1, Number(targetPage) || 1)
+
+        const pageToken =
+            typeof pageTokenOverride === 'string'
+                ? pageTokenOverride
+                : pageTokensByPage[safeTargetPage]
+
+        if (pageToken === undefined) {
+            setError('No se puede abrir esa página todavía.')
+            return
+        }
+
         setCargando(true)
 
         try {
-            const data = await calendarService.getEventos()
-            setEventos(Array.isArray(data) ? data : [])
+            const data = await calendarService.getEventos({
+                pageToken,
+                pageSize
+            })
+
+            const items = Array.isArray(data?.items) ? data.items : []
+            const nextPageToken = String(data?.nextPageToken || '')
+            const nextPageExists = Boolean(nextPageToken)
+
+            setEventos(items)
+            setCurrentPage(safeTargetPage)
+            setHasNextPage(nextPageExists)
             setError(null)
+
+            setPageTokensByPage((prev) => {
+                const baseTokens = replaceKnownTokens ? { 1: '' } : { ...prev }
+
+                baseTokens[safeTargetPage] = pageToken
+
+                if (nextPageExists) {
+                    baseTokens[safeTargetPage + 1] = nextPageToken
+                } else {
+                    delete baseTokens[safeTargetPage + 1]
+                }
+
+                return baseTokens
+            })
+
+            setTotalKnownPages((prev) => {
+                if (nextPageExists) {
+                    return Math.max(prev, safeTargetPage + 1)
+                }
+
+                return Math.max(
+                    1,
+                    Math.min(prev, safeTargetPage)
+                )
+            })
         } catch (err) {
             console.error(err)
             setError(err.message || 'No se pudieron cargar los eventos.')
@@ -75,6 +155,7 @@ export default function Calendario() {
         setDraftActual(null)
         setIcsPreview('')
         setConfirmando(false)
+        setModalError('')
     }
 
     function abrirCrearManual() {
@@ -116,10 +197,11 @@ export default function Calendario() {
             const ics = createIcsFromDraft(draft)
             setDraftActual(draft)
             setIcsPreview(ics)
+            setModalError('')
             setError(null)
         } catch (err) {
             console.error(err)
-            setError(err.message || 'No se pudo generar la vista previa ICS.')
+            setModalError(err.message || 'No se pudo generar la vista previa ICS.')
         }
     }
 
@@ -127,33 +209,30 @@ export default function Calendario() {
         if (!draftActual || !icsPreview || previewReadOnly) return
 
         setConfirmando(true)
+        setModalError('')
 
         try {
-            let resultado
-
             if (eventoEditar?.id) {
-                resultado = await calendarService.updateEventoFromDraft(
+                await calendarService.updateEventoFromDraft(
                     eventoEditar.id,
                     draftActual,
                     icsPreview
                 )
-
-                setEventos((prev) =>
-                    prev.map((ev) => (ev.id === resultado.id ? resultado : ev))
-                )
             } else {
-                resultado = await calendarService.createEventoFromDraft(
+                await calendarService.createEventoFromDraft(
                     draftActual,
                     icsPreview
                 )
-
-                setEventos((prev) => [resultado, ...prev])
             }
 
+            setError(null)
             cerrarModal()
+
+            const pageToken = pageTokensByPage[currentPage] ?? ''
+            await loadEventos(currentPage, { pageTokenOverride: pageToken })
         } catch (err) {
             console.error(err)
-            setError(err.message || 'No se pudo guardar el evento.')
+            setModalError(err.message || 'No se pudo guardar el evento.')
         } finally {
             setConfirmando(false)
         }
@@ -162,8 +241,15 @@ export default function Calendario() {
     async function handleEliminar(id) {
         try {
             await calendarService.deleteEvento(id)
-            setEventos((prev) => prev.filter((ev) => ev.id !== id))
             setError(null)
+
+            const shouldGoToPreviousPage =
+                eventos.length === 1 && currentPage > 1
+
+            const targetPage = shouldGoToPreviousPage ? currentPage - 1 : currentPage
+            const pageToken = pageTokensByPage[targetPage] ?? ''
+
+            await loadEventos(targetPage, { pageTokenOverride: pageToken })
         } catch (err) {
             console.error(err)
             setError(err.message || 'No se pudo eliminar el evento.')
@@ -180,6 +266,7 @@ export default function Calendario() {
             setIcsPreview(ics)
             setPreviewReadOnly(true)
             setCreationMode(CREATION_MODES.MANUAL)
+            setModalError('')
             setMostrarModal(true)
         } catch (err) {
             console.error(err)
@@ -194,11 +281,56 @@ export default function Calendario() {
         }
 
         setIcsPreview('')
+        setModalError('')
     }
 
     function handleCalendarAssigned() {
         setConnectionRefreshKey((prev) => prev + 1)
         setError(null)
+    }
+
+    async function handlePageSelect(page) {
+        if (cargando || page === currentPage) {
+            return
+        }
+
+        const targetToken = pageTokensByPage[page]
+
+        if (targetToken === undefined) {
+            return
+        }
+
+        await loadEventos(page, { pageTokenOverride: targetToken })
+    }
+
+    async function handlePrevPage() {
+        if (cargando || currentPage <= 1) {
+            return
+        }
+
+        const targetPage = currentPage - 1
+        const targetToken = pageTokensByPage[targetPage]
+
+        if (targetToken === undefined) {
+            return
+        }
+
+        await loadEventos(targetPage, { pageTokenOverride: targetToken })
+    }
+
+    async function handleNextPage() {
+        if (cargando || !hasNextPage) {
+            return
+        }
+
+        const targetPage = currentPage + 1
+        const targetToken = pageTokensByPage[targetPage]
+
+        if (targetToken === undefined) {
+            return
+        }
+
+        await loadEventos(targetPage, { pageTokenOverride: targetToken })
     }
 
     const modalTitle = useMemo(() => {
@@ -260,14 +392,26 @@ export default function Calendario() {
                     {error && <p className="calendario-error">{error}</p>}
 
                     {!cargando && (
-                        <div className="calendario-list">
-                            <CalendarList
-                                eventos={eventos}
-                                onEditar={abrirEdicion}
-                                onEliminar={handleEliminar}
-                                onVerIcs={handleVerIcs}
+                        <>
+                            <div className="calendario-list">
+                                <CalendarList
+                                    eventos={eventos}
+                                    onEditar={abrirEdicion}
+                                    onEliminar={handleEliminar}
+                                    onVerIcs={handleVerIcs}
+                                />
+                            </div>
+
+                            <CalendarPagination
+                                currentPage={currentPage}
+                                totalKnownPages={totalKnownPages}
+                                hasNextPage={hasNextPage}
+                                disabled={cargando}
+                                onPageSelect={handlePageSelect}
+                                onPrev={handlePrevPage}
+                                onNext={handleNextPage}
                             />
-                        </div>
+                        </>
                     )}
                 </>
             )}
@@ -308,6 +452,7 @@ export default function Calendario() {
                                 draft={draftActual}
                                 isEditing={Boolean(eventoEditar) && !previewReadOnly}
                                 isSubmitting={confirmando}
+                                submitError={modalError}
                                 onBackToEdit={handleBackFromPreview}
                                 onConfirm={handleConfirmarPreview}
                                 onCancel={cerrarModal}

@@ -3,7 +3,17 @@
 export const STORAGE_KEYS = {
     AUTH_OK: 'calendar_ics_auth_ok',
     TIMEZONE_PREFERENCE: 'calendar_ics_timezone_preference',
-    AI_DRAFT_TIMEZONE: 'calendar_ics_ai_draft_timezone'
+    AI_DRAFT_TIMEZONE: 'calendar_ics_ai_draft_timezone',
+
+    GOOGLE_ACCESS_TOKEN: 'calendar_google_access_token',
+    GOOGLE_ACCESS_TOKEN_EXPIRES_AT: 'calendar_google_access_token_expires_at',
+    GOOGLE_CONNECTED_EMAIL: 'calendar_google_connected_email',
+
+    ASSIGNED_CALENDAR_ID: 'calendar_assigned_calendar_id',
+    ASSIGNED_CALENDAR_SUMMARY: 'calendar_assigned_calendar_summary',
+    ASSIGNED_CALENDAR_TIMEZONE: 'calendar_assigned_calendar_timezone',
+    ASSIGNED_CALENDAR_BACKGROUND: 'calendar_assigned_calendar_background',
+    ASSIGNED_CALENDAR_FOREGROUND: 'calendar_assigned_calendar_foreground'
 }// src/constants/timezones.js
 
 export const POPULAR_TIMEZONES = [
@@ -49,43 +59,98 @@ export function combineDateAndTime(dateValue, timeValue) {
     return `${dateValue}T${timeValue}`
 }
 
-export function addMinutesToLocalDateTime(localDateTime, minutesToAdd) {
-    const date = new Date(localDateTime)
+export function isValidLocalDateTimeString(value) {
+    return /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.test(
+        String(value || '').trim()
+    )
+}
 
-    if (Number.isNaN(date.getTime())) {
+export function parseLocalDateTimeParts(localDateTime) {
+    const match = String(localDateTime || '')
+        .trim()
+        .match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/)
+
+    if (!match) {
+        return null
+    }
+
+    const [, year, month, day, hours, minutes] = match
+
+    return {
+        year: Number(year),
+        month: Number(month),
+        day: Number(day),
+        hours: Number(hours),
+        minutes: Number(minutes)
+    }
+}
+
+export function toUtcMillisFromLocalDateTime(localDateTime) {
+    const parts = parseLocalDateTimeParts(localDateTime)
+
+    if (!parts) {
+        return NaN
+    }
+
+    return Date.UTC(
+        parts.year,
+        parts.month - 1,
+        parts.day,
+        parts.hours,
+        parts.minutes,
+        0,
+        0
+    )
+}
+
+export function addMinutesToLocalDateTime(localDateTime, minutesToAdd) {
+    const baseUtcMillis = toUtcMillisFromLocalDateTime(localDateTime)
+    const safeMinutesToAdd = Number(minutesToAdd || 0)
+
+    if (!Number.isFinite(baseUtcMillis) || !Number.isFinite(safeMinutesToAdd)) {
         return ''
     }
 
-    date.setMinutes(date.getMinutes() + Number(minutesToAdd || 0))
-
-    return toLocalDateTimeString(date)
+    return toLocalDateTimeString(new Date(baseUtcMillis + safeMinutesToAdd * 60000))
 }
 
 export function toLocalDateTimeString(date) {
-    const year = date.getFullYear()
-    const month = pad(date.getMonth() + 1)
-    const day = pad(date.getDate())
-    const hours = pad(date.getHours())
-    const minutes = pad(date.getMinutes())
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+        return ''
+    }
+
+    const year = date.getUTCFullYear()
+    const month = pad(date.getUTCMonth() + 1)
+    const day = pad(date.getUTCDate())
+    const hours = pad(date.getUTCHours())
+    const minutes = pad(date.getUTCMinutes())
 
     return `${year}-${month}-${day}T${hours}:${minutes}`
 }
 
-export function formatIcsDateTimeLocal(localDateTime) {
-    const date = new Date(localDateTime)
+export function getDurationMinutesBetweenLocalDateTimes(startDateTime, endDateTime) {
+    const startUtcMillis = toUtcMillisFromLocalDateTime(startDateTime)
+    const endUtcMillis = toUtcMillisFromLocalDateTime(endDateTime)
 
-    if (Number.isNaN(date.getTime())) {
+    if (!Number.isFinite(startUtcMillis) || !Number.isFinite(endUtcMillis)) {
+        return NaN
+    }
+
+    return Math.round((endUtcMillis - startUtcMillis) / 60000)
+}
+
+export function formatIcsDateTimeLocal(localDateTime) {
+    const parts = parseLocalDateTimeParts(localDateTime)
+
+    if (!parts) {
         throw new Error('Fecha inválida para ICS.')
     }
 
-    const year = date.getFullYear()
-    const month = pad(date.getMonth() + 1)
-    const day = pad(date.getDate())
-    const hours = pad(date.getHours())
-    const minutes = pad(date.getMinutes())
-    const seconds = pad(date.getSeconds())
-
-    return `${year}${month}${day}T${hours}${minutes}${seconds}`
+    return [
+        String(parts.year).padStart(4, '0'),
+        pad(parts.month),
+        pad(parts.day)
+    ].join('') + `T${pad(parts.hours)}${pad(parts.minutes)}00`
 }
 
 export function formatIcsUtcStamp(date = new Date()) {
@@ -99,15 +164,37 @@ export function formatIcsUtcStamp(date = new Date()) {
     return `${year}${month}${day}T${hours}${minutes}${seconds}Z`
 }
 
-export function tryFormatHumanDateTime(value, locale = undefined) {
+export function formatLocalDateTimeForDisplay(value) {
+    if (!isValidLocalDateTimeString(value)) {
+        return value || '-'
+    }
+
+    const [datePart, timePart] = String(value).split('T')
+    return `${datePart} ${timePart}`
+}
+
+export function tryFormatHumanDateTime(value, locale = undefined, timeZone = '') {
     if (!value) return '-'
 
+    if (isValidLocalDateTimeString(value)) {
+        return formatLocalDateTimeForDisplay(value)
+    }
+
     const date = new Date(value)
+
     if (Number.isNaN(date.getTime())) {
         return value
     }
 
-    return date.toLocaleString(locale)
+    try {
+        if (timeZone) {
+            return date.toLocaleString(locale, { timeZone })
+        }
+
+        return date.toLocaleString(locale)
+    } catch (error) {
+        return date.toLocaleString(locale)
+    }
 }// src/utils/icsText.js
 
 export function escapeIcsText(value) {
@@ -348,546 +435,108 @@ label {
 
 ## Purpose
 
-This document explains two related concerns in the app:
+This document explains the current separation between:
 
-1. how access to the app itself is protected
-2. how the backend functions authenticate against Google Calendar and decide which calendar they operate on
+1. app access auth
+2. Google Calendar connection
+3. calendar assignment
 
-These are separate layers and should not be confused.
-
-- **App auth** controls whether a user can open the frontend
-- **Google Calendar auth** controls whether Netlify Functions can read and write calendar data
-- **Calendar assignment** controls which Google Calendar those functions target
+These are different layers.
 
 ---
 
-## High-level model
+## 1. App access auth
 
-The app currently uses two different authentication concepts.
+The app still uses a lightweight frontend auth gate.
 
-### 1. Frontend access gate
-
-This is the lightweight access barrier for the app UI.
-
-It uses:
+It is controlled by:
 
 - `VITE_AUTH_CODE`
 - `src/components/AuthGate.jsx`
 - `src/services/authService.js`
-- `src/constants/storageKeys.js`
 
-Its purpose is to prevent casual access to the frontend.
+Its only purpose is to block casual access to the UI.
 
-### 2. Google Calendar server authentication
+It is not related to Google login.
 
-This is the backend authentication used by Netlify Functions when they call the Google Calendar API.
+---
 
-It uses:
+## 2. Google Calendar connection
 
-- `GCAL_CLIENT_ID`
-- `GCAL_CLIENT_SECRET`
-- `GCAL_REDIRECT_URI`
+Google Calendar access is now initiated from the frontend through Google Identity Services.
+
+The browser obtains an access token for the current user session.
+
+This session is then reused for backend operations until it expires or is cleared.
+
+The relevant frontend files are:
+
+- `src/services/googleCalendarConnectionService.js`
+- `src/services/calendarConfigStorageService.js`
+- `src/components/AssignCalendarButton.jsx`
+- `src/components/CalendarPickerModal.jsx`
+- `src/components/CalendarConnectionStatus.jsx`
+
+---
+
+## 3. Calendar assignment
+
+Once the user is connected to Google, the app fetches accessible calendars and lets the user choose one.
+
+That chosen calendar becomes the assigned calendar for the app in that browser.
+
+The assignment is stored in local storage and reused until:
+
+- the token expires
+- Google rejects access
+- the user changes calendar
+- the user clears the connection
+
+---
+
+## Persistence model
+
+The browser stores:
+
+- Google access token
+- Google access token expiration
+- connected email when available
+- assigned calendar ID
+- assigned calendar summary
+- assigned calendar timezone
+
+This is browser-local persistence, not account-based persistence across devices.
+
+---
+
+## Backend model
+
+The backend no longer relies on:
+
 - `GCAL_REFRESH_TOKEN`
-- `functions/oauth2-initiateAuth.cjs`
-- `functions/oauth2-callback.cjs`
-- `functions/eventos/googleCalendarService.cjs`
+- `CALENDAR_ID`
 
-Its purpose is to allow the server-side functions to operate on the selected Google Calendar.
+as the active runtime calendar configuration for normal event operations.
 
-These two auth layers are independent.
+Instead, each request sends:
 
-A user may successfully open the frontend and still fail to list or create events if Google Calendar server auth is not configured correctly.
+- `Authorization: Bearer ...`
+- `X-Calendar-Id: ...`
 
----
-
-## Environment variables involved
-
-Example context:
-
-```env
-# Google Calendar API
-# Cuenta de Google utilizada: estudioVGH@yahoo.com
-GCAL_CLIENT_ID=81360..
-GCAL_CLIENT_SECRET=GOCSPX...
-GCAL_REDIRECT_URI=https://calendario-by-tk.netlify.app/.netlify/functions/oauth2-callback
-CALENDAR_ID=estudiovgh@yahoo.com
-TIMEZONE=America/Argentina/Cordoba
-
-# ❗ Sólo el dominio base de la app (local o prod)
-# En producción pon https://tu-dominio.com
-# En desarrollo, Netlify Dev no expone URL en process.env.URL
-# así que usaremos un fallback:
-SITE_URL=https://calendario-by-tk.netlify.app
-
-# Código de acceso restringido
-VITE_AUTH_CODE=miC....
-
-# OpenAI (solo servidor)
-OPENAI_API_KEY=sk-pr...
-````
-
-There is one additional variable required by the current backend flow:
-
-```env
-GCAL_REFRESH_TOKEN=...
-```
-
-Without `GCAL_REFRESH_TOKEN`, the Netlify Functions cannot authenticate to Google Calendar even if the client ID and secret are present.
+and the backend uses that dynamic request context.
 
 ---
 
-## App access auth behaviour
+## Important distinction
 
-## Purpose
+### App auth decides:
+who may open the app
 
-The app uses a lightweight frontend auth gate to block access to the UI unless the correct access code is entered.
+### Google session decides:
+whether the current browser session can call Google Calendar
 
-This is intended as a simple front-door protection layer for personal or limited-distribution use.
-
-It is not a full user account system.
-
----
-
-## Configuration source
-
-The frontend access gate uses:
-
-`VITE_AUTH_CODE`
-
-This value is exposed to the frontend build and is treated as the expected code.
-
-### Behaviour when configured
-
-If `VITE_AUTH_CODE` exists and is not empty:
-
-* the auth gate is active
-* the user must enter the correct code before the app is shown
-
-### Behaviour when not configured
-
-If `VITE_AUTH_CODE` is empty or missing:
-
-* the auth gate is considered disabled
-* the app opens directly
-
----
-
-## Initial app load behaviour
-
-When the app loads, the auth gate checks:
-
-1. whether auth is required
-2. whether the browser already has a persisted authenticated marker
-
-### If auth is not required
-
-The user is allowed into the app immediately.
-
-### If auth is required and the user is already authenticated
-
-The user is allowed into the app immediately.
-
-### If auth is required and the user is not authenticated
-
-The auth screen is shown instead of the application routes.
-
----
-
-## Persisted authentication behaviour
-
-Once the user enters the correct code:
-
-* the app stores an authenticated marker in local storage
-* the user is considered authenticated for future visits in the same browser
-
-This means the user should not be forced to re-enter the code every time they reopen the app.
-
-### Scope note
-
-This persistence is browser-local, not account-based.
-
-It only applies to:
-
-* the current browser
-* the current local storage context
-
-If local storage is cleared, or a different browser or device is used, the user must enter the code again.
-
----
-
-## Auth screen behaviour
-
-When the gate is active and the user is not yet authenticated, the UI shows:
-
-* a simple access form
-* one input for the code
-* a submit button
-* an error message if the code is wrong
-
-The app remains inaccessible until the code is validated.
-
----
-
-## Validation behaviour
-
-When the user submits the code:
-
-### If the code matches `VITE_AUTH_CODE`
-
-The app:
-
-1. persists authenticated state in local storage
-2. switches to allowed state
-3. renders the application normally
-
-### If the code does not match
-
-The app:
-
-* keeps the user on the auth screen
-* shows an error message such as `Código incorrecto.`
-* does not persist authentication
-
----
-
-## Relationship with routing
-
-The auth gate wraps the application router.
-
-This means route-level access is blocked globally.
-
-If the user is not authenticated, they should not be able to access:
-
-* home
-* calendar page
-* import/export page
-
-The auth gate prevents all of them because it sits above routing and only renders children once access is granted.
-
----
-
-## Error handling expectations for app auth
-
-The auth gate should degrade gracefully if local storage is unavailable.
-
-### Examples
-
-If reading local storage fails:
-
-* assume unauthenticated if auth is required
-
-If writing local storage fails:
-
-* the current session may still proceed after successful validation
-* but persistence may not survive reloads
-
-Errors may be logged for debugging, but user-facing behaviour should stay simple.
-
----
-
-## Security expectations for app auth
-
-This frontend auth gate is a lightweight access barrier, not a full security system.
-
-It helps prevent casual or unintended access, but it does not replace:
-
-* proper backend authentication
-* user accounts
-* session management
-* server-side authorization
-
-Because the expected code is delivered through frontend configuration, it should be treated as a convenience mechanism rather than high-security protection.
-
----
-
-## Google Calendar auth behaviour
-
-## Purpose
-
-The backend functions must authenticate with Google Calendar before they can:
-
-* list events
-* create events
-* update events
-* delete events
-* export the calendar
-* import ICS content into the calendar
-
-This authentication is handled server-side through OAuth credentials and a refresh token.
-
-The browser should not directly own or use the Google Calendar credentials.
-
----
-
-## Variables involved
-
-The backend Google Calendar layer uses:
-
-* `GCAL_CLIENT_ID`
-* `GCAL_CLIENT_SECRET`
-* `GCAL_REDIRECT_URI`
-* `GCAL_REFRESH_TOKEN`
-* `CALENDAR_ID`
-* `TIMEZONE`
-
-These variables are consumed mainly by:
-
-* `functions/oauth2-initiateAuth.cjs`
-* `functions/oauth2-callback.cjs`
-* `functions/eventos/googleCalendarService.cjs`
-
----
-
-## OAuth initiation flow
-
-The function:
-
-`functions/oauth2-initiateAuth.cjs`
-
-creates a Google OAuth URL using:
-
-* `GCAL_CLIENT_ID`
-* `GCAL_CLIENT_SECRET`
-* `GCAL_REDIRECT_URI`
-
-The user is redirected to Google and grants Calendar access.
-
-The requested scope is:
-
-`https://www.googleapis.com/auth/calendar`
-
-This allows the app backend to manage events in the configured calendar.
-
----
-
-## OAuth callback flow
-
-After the user grants access, Google redirects back to:
-
-`GCAL_REDIRECT_URI`
-
-In your current production setup, that is:
-
-`https://calendario-by-tk.netlify.app/.netlify/functions/oauth2-callback`
-
-The callback function:
-
-`functions/oauth2-callback.cjs`
-
-exchanges the authorization code for tokens.
-
-### Important current behaviour
-
-The callback no longer stores the refresh token in local storage.
-
-Instead, it displays the returned refresh token so it can be copied and saved as:
-
-`GCAL_REFRESH_TOKEN`
-
-This is important because the real Google Calendar operations happen server-side in Netlify Functions, not in the browser.
-
-Saving the token only in the browser would not allow the backend to authenticate.
-
----
-
-## Why `GCAL_REFRESH_TOKEN` matters
-
-The current Google Calendar service is initialized in:
-
-`functions/eventos/googleCalendarService.cjs`
-
-That file creates an OAuth client and sets credentials with:
-
-* `GCAL_CLIENT_ID`
-* `GCAL_CLIENT_SECRET`
-* `GCAL_REDIRECT_URI`
-* `GCAL_REFRESH_TOKEN`
-
-If `GCAL_REFRESH_TOKEN` is missing, the backend cannot make authenticated Google Calendar API calls.
-
-That means functions such as:
-
-* list events
-* create event
-* update event
-* delete event
-* export ICS
-* import ICS
-
-will fail even if the app frontend loads correctly.
-
----
-
-## Calendar assignment behaviour
-
-## Purpose
-
-Once the backend is authenticated against Google Calendar, it still needs to know **which calendar** to operate on.
-
-This is controlled by:
-
-`CALENDAR_ID`
-
----
-
-## Current calendar assignment
-
-In your `.env`, the current value is:
-
-```env
-CALENDAR_ID=estudiovgh@yahoo.com
-```
-
-This means the server-side functions target that specific Google Calendar.
-
-In practice, this is the calendar used by the Google account:
-
-`estudiovgh@yahoo.com`
-
-as long as that account either:
-
-* owns the calendar, or
-* has sufficient permissions on it
-
----
-
-## Where `CALENDAR_ID` is used
-
-The value is consumed in:
-
-`functions/eventos/googleCalendarService.cjs`
-
-That service passes `calendarId: CALENDAR_ID` to Google Calendar API calls such as:
-
-* `calendar.events.list`
-* `calendar.events.insert`
-* `calendar.events.update`
-* `calendar.events.delete`
-
-So all event operations are assigned to the calendar identified by `CALENDAR_ID`.
-
----
-
-## What happens if `CALENDAR_ID` is omitted
-
-The backend service currently falls back to:
-
-`primary`
-
-This means:
-
-* if `CALENDAR_ID` is not set
-* the Google-authenticated account's primary calendar is used
-
-However, when you explicitly want a known specific calendar, setting `CALENDAR_ID` is clearer and safer.
-
----
-
-## Relationship between Google account and assigned calendar
-
-These are related but not identical concepts.
-
-### Google-authenticated account
-
-This is the account represented by the OAuth tokens and refresh token.
-
-In your case, the intended account is:
-
-`estudioVGH@yahoo.com`
-
-### Assigned calendar
-
-This is the calendar selected through `CALENDAR_ID`.
-
-In your case:
-
-`estudiovgh@yahoo.com`
-
-The backend will only work correctly if the authenticated account has permission to access the assigned calendar.
-
-Usually this is fine when both refer to the same Google account's calendar, but it is still useful to understand the distinction.
-
----
-
-## Timezone behaviour at backend level
-
-The backend also uses:
-
-`TIMEZONE=America/Argentina/Cordoba`
-
-This is the default timezone fallback used by the Google Calendar service when a draft does not explicitly provide one.
-
-However, in the normal ICS-first flow, the draft usually already includes a timezone chosen in the frontend.
-
-So the effective order is:
-
-1. use the draft timezone if present
-2. otherwise use backend `TIMEZONE`
-3. otherwise use the service fallback
-
-This helps keep Google Calendar operations consistent.
-
----
-
-## SITE_URL behaviour
-
-The variable:
-
-`SITE_URL=https://calendario-by-tk.netlify.app`
-
-exists to define the base app domain when a runtime URL is not available.
-
-Historically this is useful because:
-
-* production and local environments may differ
-* Netlify Dev does not always expose `process.env.URL` the same way as production
-
-In the current OAuth setup, the main redirect authority should still be:
-
-`GCAL_REDIRECT_URI`
-
-That variable should exactly match the redirect URI registered in the Google Cloud Console.
-
-So `SITE_URL` is contextual and helpful, but not the authoritative source for Google OAuth callback resolution in the current implementation.
-
----
-
-## Backend functions affected by Google auth and calendar assignment
-
-The following functions depend on correct Google server auth and correct calendar assignment:
-
-* `functions/eventos/index.cjs`
-* `functions/eventos-by-id.cjs`
-* `functions/ics/import.cjs`
-* `functions/ics/export.cjs`
-* `functions/eventos/googleCalendarService.cjs`
-
-The following functions are specifically part of the OAuth setup:
-
-* `functions/oauth2-initiateAuth.cjs`
-* `functions/oauth2-callback.cjs`
-
-If Google auth is broken, these higher-level calendar functions will fail.
-
-If app auth is broken, the UI may be exposed, but that does not change which calendar the backend functions use.
-
----
-
-## Expected setup sequence
-
-A coherent setup looks like this:
-
-1. configure the frontend access code with `VITE_AUTH_CODE`
-2. configure Google OAuth variables:
-
-   * `GCAL_CLIENT_ID`
-   * `GCAL_CLIENT_SECRET`
-   * `GCAL_REDIRECT_URI`
-3. run the OAuth flow once to obtain a refresh token
-4. store that refresh token as `GCAL_REFRESH_TOKEN`
-5. set `CALENDAR_ID` to the intended calendar
-6. set `TIMEZONE` to the desired backend default timezone
-7. start the app and test list/create/update/delete operations
+### Assigned calendar decides:
+which calendar the app will actually list, create, update, delete, import and export against
 
 ---
 
@@ -895,74 +544,15 @@ A coherent setup looks like this:
 
 ### To open the app
 
-The user must pass the frontend access gate controlled by:
+The user must pass the frontend access gate if `VITE_AUTH_CODE` is configured.
 
-`VITE_AUTH_CODE`
+### To use Google Calendar
 
-### To let the backend operate on Google Calendar
+The user must connect Google and obtain a valid access token.
 
-The server must have valid Google OAuth configuration:
+### To operate on a specific calendar
 
-* `GCAL_CLIENT_ID`
-* `GCAL_CLIENT_SECRET`
-* `GCAL_REDIRECT_URI`
-* `GCAL_REFRESH_TOKEN`
-
-### To choose which calendar is used
-
-The backend uses:
-
-`CALENDAR_ID`
-
-### To control the backend timezone fallback
-
-The backend uses:
-
-`TIMEZONE`
-
----
-
-## Responsibilities by layer
-
-### `AuthGate`
-
-Responsible for:
-
-* deciding whether to show the app or the auth screen
-* capturing the user input code
-* showing validation errors
-* switching to allowed state after success
-
-### `authService`
-
-Responsible for:
-
-* reading the configured access code
-* deciding whether app auth is required
-* validating the submitted code
-* reading and writing authenticated state in local storage
-
-### `oauth2-initiateAuth.cjs`
-
-Responsible for:
-
-* generating the Google authorization URL
-
-### `oauth2-callback.cjs`
-
-Responsible for:
-
-* exchanging the authorization code for tokens
-* exposing the refresh token so it can be stored securely as server environment config
-
-### `googleCalendarService.cjs`
-
-Responsible for:
-
-* authenticating server-side Google Calendar API usage
-* selecting the calendar through `CALENDAR_ID`
-* applying backend timezone fallback when needed
-* performing event CRUD operations
+The user must explicitly assign one calendar from the available list.
 
 ---
 
@@ -970,13 +560,7 @@ Responsible for:
 
 The key principle is:
 
-**frontend access auth decides who may open the app, while backend Google auth and `CALENDAR_ID` decide which calendar the server functions can operate on.**
-
-```
-
-Si querés, el siguiente te lo puedo redactar como `.md` de **environment variables reference**, más corto y tipo documentación técnica pura.
-```
-# AI Event Creation Behaviour
+**opening the app, connecting Google, and assigning a calendar are now separate concerns.**# AI Event Creation Behaviour
 
 ## Purpose
 
@@ -1332,7 +916,231 @@ Hay dos mejoras clave respecto al original:
 1. **arregla el markdown roto** de los bloques JSON y encabezados  
 2. **lo alinea con tu estado real actual**, donde ya existe `functions/ai/event-draft.cjs`, pero hoy funciona con parsing heurístico y no con OpenAI real
 
-Si querés, seguimos con `auth-gate-behaviour.md`.### Comandos
+Si querés, seguimos con `auth-gate-behaviour.md`.# Calendar Connection Flow
+
+## Purpose
+
+The app no longer works with one globally fixed Google Calendar configured on the server.
+
+Instead, the user connects Google from the frontend, selects a calendar, and that assignment is stored locally in the browser until:
+
+- the session expires
+- Google rejects the token
+- the user clears the connection
+- the user explicitly assigns another calendar
+
+---
+
+## High-level model
+
+There are now three separate concepts:
+
+1. app access gate
+2. Google session
+3. assigned calendar
+
+They should not be confused.
+
+### 1. App access gate
+
+This is the lightweight UI gate controlled by:
+
+- `VITE_AUTH_CODE`
+- `AuthGate`
+- `authService`
+
+It only decides whether the user can open the app UI.
+
+### 2. Google session
+
+This is the browser session obtained through Google Identity Services.
+
+It provides an access token that is later sent to the backend on each request.
+
+### 3. Assigned calendar
+
+This is the specific Google Calendar selected by the user after Google login.
+
+The selected calendar is persisted in local storage and reused until invalid.
+
+---
+
+## New UX flow
+
+### Entry point
+
+The user clicks:
+
+`Asignar calendario`
+
+This action is available from the menu / status area.
+
+### Login
+
+The frontend opens the Google flow and requests permissions for Calendar access.
+
+### Calendar selection
+
+After Google returns an access token, the frontend fetches the user's accessible calendars and displays a picker.
+
+The user selects one calendar and confirms.
+
+### Persistence
+
+The app saves locally:
+
+- Google access token
+- expiration timestamp
+- connected email when available
+- assigned calendar ID
+- assigned calendar summary
+- assigned calendar timezone
+- optional visual metadata such as colors
+
+---
+
+## What local storage is used for
+
+The connection is browser-local.
+
+This means the assignment persists only for:
+
+- the current browser
+- the current local storage context
+
+If the browser storage is cleared, the user must assign a calendar again.
+
+---
+
+## Backend request model
+
+The backend no longer decides the calendar from `CALENDAR_ID`.
+
+Instead, each relevant request sends:
+
+- `Authorization: Bearer <access_token>`
+- `X-Calendar-Id: <selected_calendar_id>`
+
+The Netlify Functions use that request context to operate on the chosen calendar.
+
+---
+
+## Endpoints affected
+
+The following endpoints depend on the assigned calendar and the Google token sent by the frontend:
+
+- `/api/eventos`
+- `/api/eventos/:id`
+- `/api/ics/import`
+- `/api/ics/export`
+
+The following endpoint is unchanged conceptually because it only produces a draft:
+
+- `/api/ai/event-draft`
+
+---
+
+## Error behaviour
+
+If Google rejects the token or the calendar is no longer accessible:
+
+- the request fails
+- the frontend clears the stored Google session and assigned calendar
+- the user must assign a calendar again
+
+This avoids stale or misleading local state.
+
+---
+
+## Important principle
+
+The key principle is:
+
+**the frontend remembers which Google calendar is assigned, and the backend executes all event operations against that assigned calendar using the token provided by the frontend.**
+
+# Environment Variables Reference
+
+## Frontend
+
+### `VITE_AUTH_CODE`
+
+Optional frontend access code.
+
+If present:
+
+- `AuthGate` is enabled
+- the user must enter the code before using the app
+
+If absent:
+
+- the app opens directly
+
+### `VITE_GOOGLE_CLIENT_ID`
+
+Required for the new Google Calendar connection flow.
+
+Used by:
+
+- `src/services/googleCalendarConnectionService.js`
+
+Purpose:
+
+- initialize Google Identity Services from the frontend
+- request an access token for the current user
+
+Without it:
+
+- the user cannot assign a calendar
+
+---
+
+## Backend
+
+### `TIMEZONE`
+
+Optional backend fallback timezone.
+
+Used by:
+
+- `functions/eventos/googleCalendarService.cjs`
+
+Purpose:
+
+- fallback timezone when the draft does not specify one
+
+Default:
+
+- `Europe/Dublin`
+
+---
+
+## Legacy server OAuth variables
+
+These variables are no longer part of the main runtime calendar flow:
+
+- `GCAL_CLIENT_ID`
+- `GCAL_CLIENT_SECRET`
+- `GCAL_REDIRECT_URI`
+- `GCAL_REFRESH_TOKEN`
+- `CALENDAR_ID`
+
+They belonged to the old model where the backend used one fixed Google account and one fixed calendar.
+
+The new implementation does not depend on them for normal CRUD/import/export behaviour.
+
+---
+
+## Optional / unrelated
+
+### `OPENAI_API_KEY`
+
+Used only if you later connect a real AI provider on the backend.
+
+The current `functions/ai/event-draft.cjs` implementation is heuristic and does not require a real provider yet.
+
+### `SITE_URL`
+
+Contextual environment variable that may still be useful for deployment-level logic, but it is not the driver of the new Google calendar assignment flow.### Comandos
 
 find src \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.css" -o -name "*.json" -o -name "*.md" \) \
   ! -name "*.d.ts" \
@@ -1769,8 +1577,11 @@ src
 ├── components
 │   ├── AdvancedEventFields.jsx
 │   ├── AiEventComposer.jsx
+│   ├── AssignCalendarButton.jsx
 │   ├── AuthGate.jsx
+│   ├── CalendarConnectionStatus.jsx
 │   ├── CalendarList.jsx
+│   ├── CalendarPickerModal.jsx
 │   ├── EventForm.jsx
 │   ├── IcsPreview.jsx
 │   └── TimezoneField.jsx
@@ -1779,8 +1590,11 @@ src
 │   └── timezones.js
 ├── docs
 │   ├── ai-event-behaviour.md
+│   ├── auth-and-calendar.md
+│   ├── calendar-connection-flow.md
 │   ├── comandos.md
 │   ├── manual-event-behaviour.md
+│   ├── package-and-netlify-context.md
 │   └── tree.md
 ├── index.css
 ├── main.jsx
@@ -1791,8 +1605,10 @@ src
 ├── services
 │   ├── aiEventService.js
 │   ├── authService.js
+│   ├── calendarConfigStorageService.js
 │   ├── calendarService.js
 │   ├── eventDraftService.js
+│   ├── googleCalendarConnectionService.js
 │   ├── icsService.js
 │   └── timezoneService.js
 ├── styles
@@ -1803,6 +1619,8 @@ src
     ├── dateTime.js
     └── icsText.js
 
+8 directories, 38 files
+(base) ➜  Calendario git:(main) ✗ tree functions
 functions
 ├── ai
 │   └── event-draft.cjs
@@ -1815,10 +1633,12 @@ functions
 ├── ics
 │   ├── export.cjs
 │   └── import.cjs
+├── lib
+│   └── ics
+│       └── parseIcsToDraft.cjs
 ├── oauth2-callback.cjs
 ├── oauth2-initiateAuth.cjs
-└── services
-# package.json and netlify.toml
+└── services# package.json and netlify.toml
 
 {
   "name": "calendario",
@@ -1880,6 +1700,10 @@ functions
   from = "/api/ics/export"
   to = "/.netlify/functions/ics/export"
   status = 200
+
+# OAuth server-side legacy deprecated.
+# Se mantienen solo por compatibilidad temporal, pero la nueva implementación
+# usa Google Identity Services en frontend.
 
 [[redirects]]
   from = "/oauth/google/init"
@@ -2651,6 +2475,76 @@ export default function CalendarList({ eventos, onEditar, onEliminar, onVerIcs }
             ))}
         </ul>
     )
+}// src/components/AssignCalendarButton.jsx
+
+import React, { useState } from 'react'
+import { connectAndFetchCalendars } from '../services/googleCalendarConnectionService'
+import CalendarPickerModal from './CalendarPickerModal'
+
+export default function AssignCalendarButton({
+    buttonText = 'Asignar calendario',
+    className = 'button-primary',
+    onCalendarAssigned
+}) {
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState('')
+    const [openPicker, setOpenPicker] = useState(false)
+    const [calendars, setCalendars] = useState([])
+
+    async function handleConnect() {
+        setLoading(true)
+        setError('')
+
+        try {
+            const items = await connectAndFetchCalendars()
+            setCalendars(items)
+            setOpenPicker(true)
+        } catch (err) {
+            console.error(err)
+            setError(err.message || 'No se pudo iniciar la conexión con Google.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    function handleClosePicker() {
+        setOpenPicker(false)
+    }
+
+    function handleAssigned(calendar) {
+        setOpenPicker(false)
+
+        if (typeof onCalendarAssigned === 'function') {
+            onCalendarAssigned(calendar)
+        }
+    }
+
+    return (
+        <>
+            <button
+                type="button"
+                className={className}
+                onClick={handleConnect}
+                disabled={loading}
+            >
+                {loading ? 'Conectando...' : buttonText}
+            </button>
+
+            {error ? (
+                <p className="error-text" style={{ marginTop: '0.75rem' }}>
+                    {error}
+                </p>
+            ) : null}
+
+            {openPicker && (
+                <CalendarPickerModal
+                    calendars={calendars}
+                    onClose={handleClosePicker}
+                    onAssigned={handleAssigned}
+                />
+            )}
+        </>
+    )
 }// src/components/AdvancedEventFields.jsx
 
 import React from 'react'
@@ -2940,6 +2834,7 @@ export default function IcsPreview({
     draft,
     isEditing,
     isSubmitting,
+    submitError,
     onBackToEdit,
     onConfirm,
     onCancel
@@ -2961,6 +2856,21 @@ export default function IcsPreview({
 
     return (
         <div style={{ padding: '1.5rem' }}>
+            {submitError ? (
+                <div
+                    style={{
+                        marginBottom: '1rem',
+                        color: '#991b1b',
+                        background: '#fef2f2',
+                        border: '1px solid #fecaca',
+                        borderRadius: '10px',
+                        padding: '0.85rem 1rem'
+                    }}
+                >
+                    {submitError}
+                </div>
+            ) : null}
+
             <div
                 style={{
                     display: 'grid',
@@ -2979,8 +2889,8 @@ export default function IcsPreview({
                     <h4 style={{ marginTop: 0 }}>Resumen</h4>
 
                     <p><strong>Título:</strong> {summary.title}</p>
-                    <p><strong>Inicio:</strong> {tryFormatHumanDateTime(summary.start)}</p>
-                    <p><strong>Fin:</strong> {tryFormatHumanDateTime(summary.end)}</p>
+                    <p><strong>Inicio:</strong> {tryFormatHumanDateTime(summary.start, undefined, summary.timeZone)}</p>
+                    <p><strong>Fin:</strong> {tryFormatHumanDateTime(summary.end, undefined, summary.timeZone)}</p>
                     <p><strong>Duración:</strong> {summary.durationMinutes} minutos</p>
                     <p><strong>Lugar:</strong> {summary.location}</p>
                     <p><strong>Zona horaria:</strong> {summary.timeZone}</p>
@@ -3076,6 +2986,274 @@ export default function IcsPreview({
                             ? 'Confirmar actualización'
                             : 'Confirmar creación'}
                 </button>
+            </div>
+        </div>
+    )
+}// src/components/CalendarConnectionStatus.jsx
+
+import React from 'react'
+import AssignCalendarButton from './AssignCalendarButton'
+import {
+    getAssignedCalendar,
+    hasAssignedCalendar,
+    isGoogleSessionActive,
+    getGoogleConnectedEmail,
+    clearFullCalendarConnection
+} from '../services/calendarConfigStorageService'
+
+export default function CalendarConnectionStatus({ onCalendarAssigned }) {
+    const connected = isGoogleSessionActive()
+    const assigned = getAssignedCalendar()
+    const email = getGoogleConnectedEmail()
+
+    function handleDisconnect() {
+        clearFullCalendarConnection()
+
+        if (typeof onCalendarAssigned === 'function') {
+            onCalendarAssigned(null)
+        }
+    }
+
+    return (
+        <div
+            style={{
+                background: '#fff',
+                border: '1px solid #d7deea',
+                borderRadius: '16px',
+                padding: '1.25rem 1.5rem',
+                boxShadow: '0 12px 28px rgba(15, 23, 42, 0.06)'
+            }}
+        >
+            <h3 style={{ marginTop: 0, marginBottom: '0.6rem', color: '#172033' }}>
+                Estado del calendario
+            </h3>
+
+            <p style={{ margin: 0, color: '#5b6472', lineHeight: 1.65 }}>
+                <strong>Sesión Google:</strong> {connected ? 'Activa' : 'No conectada'}
+            </p>
+
+            {email ? (
+                <p style={{ margin: '0.35rem 0 0', color: '#5b6472', lineHeight: 1.65 }}>
+                    <strong>Cuenta:</strong> {email}
+                </p>
+            ) : null}
+
+            <p style={{ margin: '0.35rem 0 0', color: '#5b6472', lineHeight: 1.65 }}>
+                <strong>Calendario asignado:</strong>{' '}
+                {hasAssignedCalendar()
+                    ? `${assigned.summary || 'Sin nombre'} (${assigned.id})`
+                    : 'Ninguno'}
+            </p>
+
+            {assigned?.timeZone ? (
+                <p style={{ margin: '0.35rem 0 0', color: '#5b6472', lineHeight: 1.65 }}>
+                    <strong>Zona horaria:</strong> {assigned.timeZone}
+                </p>
+            ) : null}
+
+            <div
+                style={{
+                    marginTop: '1rem',
+                    display: 'flex',
+                    gap: '0.75rem',
+                    flexWrap: 'wrap'
+                }}
+            >
+                <AssignCalendarButton
+                    buttonText={
+                        hasAssignedCalendar() ? 'Cambiar calendario' : 'Asignar calendario'
+                    }
+                    className="button-primary"
+                    onCalendarAssigned={onCalendarAssigned}
+                />
+
+                {(connected || hasAssignedCalendar()) && (
+                    <button
+                        type="button"
+                        className="button-secondary"
+                        onClick={handleDisconnect}
+                    >
+                        Limpiar conexión
+                    </button>
+                )}
+            </div>
+        </div>
+    )
+}// src/components/CalendarPickerModal.jsx
+
+import React, { useMemo, useState } from 'react'
+import { assignCalendar } from '../services/googleCalendarConnectionService'
+
+function sortCalendars(items) {
+    return [...items].sort((a, b) => {
+        if (a.primary && !b.primary) return -1
+        if (!a.primary && b.primary) return 1
+        return String(a.summary || '').localeCompare(String(b.summary || ''))
+    })
+}
+
+export default function CalendarPickerModal({
+    calendars,
+    onClose,
+    onAssigned
+}) {
+    const orderedCalendars = useMemo(
+        () => sortCalendars(Array.isArray(calendars) ? calendars : []),
+        [calendars]
+    )
+
+    const [selectedId, setSelectedId] = useState(
+        orderedCalendars[0]?.id || ''
+    )
+    const [submitting, setSubmitting] = useState(false)
+    const [error, setError] = useState('')
+
+    function handleConfirm() {
+        if (!selectedId) {
+            setError('Debes seleccionar un calendario.')
+            return
+        }
+
+        const calendar = orderedCalendars.find((item) => item.id === selectedId)
+
+        if (!calendar) {
+            setError('No se encontró el calendario seleccionado.')
+            return
+        }
+
+        setSubmitting(true)
+        setError('')
+
+        try {
+            assignCalendar(calendar)
+
+            if (typeof onAssigned === 'function') {
+                onAssigned(calendar)
+            }
+        } catch (err) {
+            console.error(err)
+            setError(err.message || 'No se pudo asignar el calendario.')
+            setSubmitting(false)
+        }
+    }
+
+    return (
+        <div className="modal-overlay">
+            <div className="modal-content modal-content-wide">
+                <div className="modal-header">
+                    <h3 className="modal-title">Asignar calendario</h3>
+
+                    <button
+                        className="modal-close-btn"
+                        onClick={onClose}
+                        aria-label="Cerrar modal"
+                        type="button"
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <div style={{ padding: '1.5rem' }}>
+                    <p style={{ marginTop: 0, color: '#5b6472' }}>
+                        Selecciona el calendario que la app usará para listar, crear, editar, eliminar, importar y exportar eventos.
+                    </p>
+
+                    {orderedCalendars.length === 0 ? (
+                        <p className="error-text" style={{ marginBottom: 0 }}>
+                            No se encontraron calendarios accesibles para esta cuenta.
+                        </p>
+                    ) : (
+                        <div
+                            style={{
+                                display: 'grid',
+                                gap: '0.75rem',
+                                maxHeight: '420px',
+                                overflow: 'auto'
+                            }}
+                        >
+                            {orderedCalendars.map((calendar) => {
+                                const checked = selectedId === calendar.id
+
+                                return (
+                                    <label
+                                        key={calendar.id}
+                                        style={{
+                                            display: 'block',
+                                            border: checked
+                                                ? '1px solid #2563eb'
+                                                : '1px solid #d7deea',
+                                            borderRadius: '12px',
+                                            padding: '1rem',
+                                            background: checked ? '#eef2ff' : '#fff',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="calendar-select"
+                                            checked={checked}
+                                            onChange={() => setSelectedId(calendar.id)}
+                                            style={{ marginRight: '0.5rem', width: 'auto' }}
+                                        />
+
+                                        <strong>{calendar.summary || calendar.id}</strong>
+
+                                        {calendar.primary ? (
+                                            <span style={{ marginLeft: '0.5rem', color: '#2563eb' }}>
+                                                Principal
+                                            </span>
+                                        ) : null}
+
+                                        <div style={{ marginTop: '0.5rem', color: '#5b6472' }}>
+                                            <div><strong>ID:</strong> {calendar.id}</div>
+                                            <div><strong>Zona horaria:</strong> {calendar.timeZone || '-'}</div>
+                                            <div><strong>Permisos:</strong> {calendar.accessRole || '-'}</div>
+                                            {calendar.description ? (
+                                                <div style={{ marginTop: '0.35rem' }}>
+                                                    <strong>Descripción:</strong> {calendar.description}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    </label>
+                                )
+                            })}
+                        </div>
+                    )}
+
+                    {error ? (
+                        <p className="error-text" style={{ marginBottom: 0 }}>
+                            {error}
+                        </p>
+                    ) : null}
+
+                    <div
+                        style={{
+                            marginTop: '1.25rem',
+                            display: 'flex',
+                            justifyContent: 'flex-end',
+                            gap: '0.75rem',
+                            flexWrap: 'wrap'
+                        }}
+                    >
+                        <button
+                            type="button"
+                            className="button-secondary"
+                            onClick={onClose}
+                            disabled={submitting}
+                        >
+                            Cancelar
+                        </button>
+
+                        <button
+                            type="button"
+                            className="button-primary"
+                            onClick={handleConfirm}
+                            disabled={submitting || orderedCalendars.length === 0}
+                        >
+                            {submitting ? 'Guardando...' : 'Usar este calendario'}
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     )
@@ -3307,6 +3485,12 @@ export default function App() {
 import React, { useMemo, useState } from 'react'
 import * as calendarService from '../services/calendarService'
 import { validateIcsContent } from '../services/icsService'
+import CalendarConnectionStatus from '../components/CalendarConnectionStatus'
+import {
+    getAssignedCalendar,
+    hasAssignedCalendar,
+    isGoogleSessionActive
+} from '../services/calendarConfigStorageService'
 import '../styles/importexport.css'
 
 export default function ImportExport() {
@@ -3314,6 +3498,10 @@ export default function ImportExport() {
     const [errorParseo, setErrorParseo] = useState(null)
     const [resultado, setResultado] = useState(null)
     const [importando, setImportando] = useState(false)
+    const [refreshKey, setRefreshKey] = useState(0)
+
+    const readyToUseCalendar = isGoogleSessionActive() && hasAssignedCalendar()
+    const assignedCalendar = getAssignedCalendar()
 
     const validation = useMemo(() => {
         if (!icsInput.trim()) {
@@ -3326,6 +3514,11 @@ export default function ImportExport() {
     async function handleImportar() {
         setErrorParseo(null)
         setResultado(null)
+
+        if (!readyToUseCalendar) {
+            setErrorParseo('Primero debes asignar un calendario.')
+            return
+        }
 
         if (!icsInput.trim()) {
             setErrorParseo('Debes pegar contenido ICS antes de importar.')
@@ -3356,12 +3549,25 @@ export default function ImportExport() {
     }
 
     async function handleExportarTodos() {
+        setErrorParseo(null)
+
+        if (!readyToUseCalendar) {
+            setErrorParseo('Primero debes asignar un calendario.')
+            return
+        }
+
         try {
             await calendarService.downloadAllEventosIcs()
         } catch (err) {
             console.error(err)
             setErrorParseo(err.message || 'No se pudo exportar el calendario.')
         }
+    }
+
+    function handleCalendarAssigned() {
+        setRefreshKey((prev) => prev + 1)
+        setErrorParseo(null)
+        setResultado(null)
     }
 
     return (
@@ -3372,6 +3578,11 @@ export default function ImportExport() {
                     <p className="importexport-subtitle">
                         El formato principal de la app ahora es .ics.
                     </p>
+                    {assignedCalendar?.summary ? (
+                        <p className="importexport-subtitle" style={{ marginTop: '0.5rem' }}>
+                            Calendario activo: <strong>{assignedCalendar.summary}</strong>
+                        </p>
+                    ) : null}
                 </div>
 
                 <button
@@ -3383,54 +3594,69 @@ export default function ImportExport() {
                 </button>
             </header>
 
-            <section className="importexport-panel">
-                <label className="importexport-label" htmlFor="ics-input">
-                    Pega aquí el contenido del archivo .ics
-                </label>
-
-                <textarea
-                    id="ics-input"
-                    className="importexport-textarea"
-                    placeholder="BEGIN:VCALENDAR..."
-                    value={icsInput}
-                    onChange={(e) => setIcsInput(e.target.value)}
-                    spellCheck={false}
+            <div style={{ marginBottom: '1.5rem' }}>
+                <CalendarConnectionStatus
+                    key={refreshKey}
+                    onCalendarAssigned={handleCalendarAssigned}
                 />
+            </div>
 
-                {validation && (
-                    <div
-                        className={
-                            validation.ok
-                                ? 'importexport-validation importexport-validation-ok'
-                                : 'importexport-validation importexport-validation-error'
-                        }
-                    >
-                        {validation.ok
-                            ? 'El contenido ICS parece válido.'
-                            : `Problema detectado: ${validation.error}`}
+            {!readyToUseCalendar ? (
+                <section className="importexport-panel">
+                    <p className="error-text" style={{ margin: 0 }}>
+                        Primero conecta Google y asigna un calendario para importar o exportar.
+                    </p>
+                </section>
+            ) : (
+                <section className="importexport-panel">
+                    <label className="importexport-label" htmlFor="ics-input">
+                        Pega aquí el contenido del archivo .ics
+                    </label>
+
+                    <textarea
+                        id="ics-input"
+                        className="importexport-textarea"
+                        placeholder="BEGIN:VCALENDAR..."
+                        value={icsInput}
+                        onChange={(e) => setIcsInput(e.target.value)}
+                        spellCheck={false}
+                    />
+
+                    {validation && (
+                        <div
+                            className={
+                                validation.ok
+                                    ? 'importexport-validation importexport-validation-ok'
+                                    : 'importexport-validation importexport-validation-error'
+                            }
+                        >
+                            {validation.ok
+                                ? 'El contenido ICS parece válido.'
+                                : `Problema detectado: ${validation.error}`}
+                        </div>
+                    )}
+
+                    {errorParseo && <p className="error-text">{errorParseo}</p>}
+
+                    <div className="importexport-actions">
+                        <button
+                            type="button"
+                            className="importexport-button"
+                            disabled={importando}
+                            onClick={handleImportar}
+                        >
+                            {importando ? 'Importando...' : 'Importar ICS'}
+                        </button>
                     </div>
-                )}
 
-                {errorParseo && <p className="error-text">{errorParseo}</p>}
-
-                <div className="importexport-actions">
-                    <button
-                        type="button"
-                        className="importexport-button"
-                        disabled={importando}
-                        onClick={handleImportar}
-                    >
-                        {importando ? 'Importando...' : 'Importar ICS'}
-                    </button>
-                </div>
-
-                {resultado && (
-                    <div className="importexport-result">
-                        <strong>Resultado:</strong>
-                        <p>{resultado.message}</p>
-                    </div>
-                )}
-            </section>
+                    {resultado && (
+                        <div className="importexport-result">
+                            <strong>Resultado:</strong>
+                            <p>{resultado.message}</p>
+                        </div>
+                    )}
+                </section>
+            )}
         </div>
     )
 }// src/pages/Calendario.jsx
@@ -3440,11 +3666,17 @@ import CalendarList from '../components/CalendarList'
 import EventForm from '../components/EventForm'
 import IcsPreview from '../components/IcsPreview'
 import AiEventComposer from '../components/AiEventComposer'
+import CalendarConnectionStatus from '../components/CalendarConnectionStatus'
 import * as calendarService from '../services/calendarService'
 import {
     createIcsFromDraft,
     buildDraftFromExistingEvent
 } from '../services/icsService'
+import {
+    getAssignedCalendar,
+    hasAssignedCalendar,
+    isGoogleSessionActive
+} from '../services/calendarConfigStorageService'
 import '../styles/calendario.css'
 
 const CREATION_MODES = {
@@ -3465,10 +3697,23 @@ export default function Calendario() {
     const [draftActual, setDraftActual] = useState(null)
     const [icsPreview, setIcsPreview] = useState('')
     const [confirmando, setConfirmando] = useState(false)
+    const [modalError, setModalError] = useState('')
+
+    const [connectionRefreshKey, setConnectionRefreshKey] = useState(0)
+
+    const sessionActive = isGoogleSessionActive()
+    const assignedCalendar = getAssignedCalendar()
+    const readyToUseCalendar = sessionActive && hasAssignedCalendar()
 
     useEffect(() => {
+        if (!readyToUseCalendar) {
+            setEventos([])
+            setCargando(false)
+            return
+        }
+
         loadEventos()
-    }, [])
+    }, [connectionRefreshKey, readyToUseCalendar])
 
     async function loadEventos() {
         setCargando(true)
@@ -3479,7 +3724,7 @@ export default function Calendario() {
             setError(null)
         } catch (err) {
             console.error(err)
-            setError('No se pudieron cargar los eventos.')
+            setError(err.message || 'No se pudieron cargar los eventos.')
         } finally {
             setCargando(false)
         }
@@ -3492,15 +3737,26 @@ export default function Calendario() {
         setDraftActual(null)
         setIcsPreview('')
         setConfirmando(false)
+        setModalError('')
     }
 
     function abrirCrearManual() {
+        if (!readyToUseCalendar) {
+            setError('Primero debes asignar un calendario.')
+            return
+        }
+
         resetModalState()
         setCreationMode(CREATION_MODES.MANUAL)
         setMostrarModal(true)
     }
 
     function abrirCrearIA() {
+        if (!readyToUseCalendar) {
+            setError('Primero debes asignar un calendario.')
+            return
+        }
+
         resetModalState()
         setCreationMode(CREATION_MODES.AI)
         setMostrarModal(true)
@@ -3523,10 +3779,11 @@ export default function Calendario() {
             const ics = createIcsFromDraft(draft)
             setDraftActual(draft)
             setIcsPreview(ics)
+            setModalError('')
             setError(null)
         } catch (err) {
             console.error(err)
-            setError(err.message || 'No se pudo generar la vista previa ICS.')
+            setModalError(err.message || 'No se pudo generar la vista previa ICS.')
         }
     }
 
@@ -3534,6 +3791,7 @@ export default function Calendario() {
         if (!draftActual || !icsPreview || previewReadOnly) return
 
         setConfirmando(true)
+        setModalError('')
 
         try {
             let resultado
@@ -3557,10 +3815,11 @@ export default function Calendario() {
                 setEventos((prev) => [resultado, ...prev])
             }
 
+            setError(null)
             cerrarModal()
         } catch (err) {
             console.error(err)
-            setError(err.message || 'No se pudo guardar el evento.')
+            setModalError(err.message || 'No se pudo guardar el evento.')
         } finally {
             setConfirmando(false)
         }
@@ -3587,6 +3846,7 @@ export default function Calendario() {
             setIcsPreview(ics)
             setPreviewReadOnly(true)
             setCreationMode(CREATION_MODES.MANUAL)
+            setModalError('')
             setMostrarModal(true)
         } catch (err) {
             console.error(err)
@@ -3601,6 +3861,12 @@ export default function Calendario() {
         }
 
         setIcsPreview('')
+        setModalError('')
+    }
+
+    function handleCalendarAssigned() {
+        setConnectionRefreshKey((prev) => prev + 1)
+        setError(null)
     }
 
     const modalTitle = useMemo(() => {
@@ -3627,6 +3893,11 @@ export default function Calendario() {
                     <p className="calendario-subtitle">
                         Todos los eventos se revisan primero como archivo .ics antes de confirmar.
                     </p>
+                    {assignedCalendar?.summary ? (
+                        <p className="calendario-subtitle" style={{ marginTop: '0.5rem' }}>
+                            Calendario activo: <strong>{assignedCalendar.summary}</strong>
+                        </p>
+                    ) : null}
                 </div>
 
                 <div className="calendario-actions">
@@ -3643,21 +3914,33 @@ export default function Calendario() {
                 </div>
             </header>
 
-            {cargando && <p className="calendario-loading">Cargando eventos...</p>}
-            {error && <p className="calendario-error">{error}</p>}
+            <div style={{ marginBottom: '1.5rem' }}>
+                <CalendarConnectionStatus onCalendarAssigned={handleCalendarAssigned} />
+            </div>
 
-            {!cargando && (
-                <div className="calendario-list">
-                    <CalendarList
-                        eventos={eventos}
-                        onEditar={abrirEdicion}
-                        onEliminar={handleEliminar}
-                        onVerIcs={handleVerIcs}
-                    />
+            {!readyToUseCalendar ? (
+                <div className="calendar-empty-state">
+                    Primero conecta Google y asigna un calendario para empezar a trabajar.
                 </div>
+            ) : (
+                <>
+                    {cargando && <p className="calendario-loading">Cargando eventos...</p>}
+                    {error && <p className="calendario-error">{error}</p>}
+
+                    {!cargando && (
+                        <div className="calendario-list">
+                            <CalendarList
+                                eventos={eventos}
+                                onEditar={abrirEdicion}
+                                onEliminar={handleEliminar}
+                                onVerIcs={handleVerIcs}
+                            />
+                        </div>
+                    )}
+                </>
             )}
 
-            {mostrarModal && (
+            {mostrarModal && readyToUseCalendar && (
                 <div className="modal-overlay">
                     <div className="modal-content modal-content-wide">
                         <div className="modal-header">
@@ -3693,6 +3976,7 @@ export default function Calendario() {
                                 draft={draftActual}
                                 isEditing={Boolean(eventoEditar) && !previewReadOnly}
                                 isSubmitting={confirmando}
+                                submitError={modalError}
                                 onBackToEdit={handleBackFromPreview}
                                 onConfirm={handleConfirmarPreview}
                                 onCancel={cerrarModal}
@@ -3706,9 +3990,17 @@ export default function Calendario() {
 }// src/pages/Home.jsx
 
 import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import CalendarConnectionStatus from '../components/CalendarConnectionStatus'
 import '../styles/home.css'
 
 export default function Home() {
+    const [, setRefreshKey] = useState(0)
+
+    function handleCalendarAssigned() {
+        setRefreshKey((prev) => prev + 1)
+    }
+
     return (
         <div className="home-container">
             <div className="home-hero">
@@ -3717,6 +4009,8 @@ export default function Home() {
                     Crea, revisa y confirma eventos a partir de archivos .ics antes de guardarlos.
                 </h2>
             </div>
+
+            <CalendarConnectionStatus onCalendarAssigned={handleCalendarAssigned} />
 
             <div className="home-options">
                 <Link to="/calendario" className="home-option">
@@ -3729,7 +4023,7 @@ export default function Home() {
                 <Link to="/import-export" className="home-option">
                     <span className="home-option-title">Importar / exportar .ics</span>
                     <span className="home-option-text">
-                        Pega, valida, revisa y confirma contenido ICS.
+                        Pega, valida, revisa y confirma contenido ICS sobre el calendario asignado.
                     </span>
                 </Link>
             </div>
@@ -3737,8 +4031,8 @@ export default function Home() {
             <div className="home-info-card">
                 <h3 className="home-info-title">Cómo funciona ahora</h3>
                 <p className="home-info-text">
-                    Todo evento pasa primero por una vista previa del archivo ICS. Solo después de tu
-                    confirmación se crea o actualiza.
+                    Primero conectas tu cuenta Google, eliges el calendario que quieras usar y esa
+                    asignación queda guardada localmente hasta que caduque o decidas cambiarla.
                 </p>
             </div>
 
@@ -3749,10 +4043,62 @@ export default function Home() {
     )
 }// src/services/icsService.js
 
-import { formatIcsDateTimeLocal, formatIcsUtcStamp } from '../utils/dateTime'
+import {
+    formatIcsDateTimeLocal,
+    formatIcsUtcStamp,
+    getDurationMinutesBetweenLocalDateTimes,
+    isValidLocalDateTimeString
+} from '../utils/dateTime'
 import { buildIcsLines, escapeIcsText, sanitizeUidPart } from '../utils/icsText'
 
 const DEFAULT_PRODUCT_ID = '-//Santiago Haspert Piaggio//Calendar ICS//EN'
+const DEFAULT_TIMEZONE = 'Europe/Dublin'
+
+function pad(value) {
+    return String(value).padStart(2, '0')
+}
+
+function getDatePartsInTimeZone(date, timeZone) {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23'
+    })
+
+    const parts = formatter.formatToParts(date)
+    const map = {}
+
+    for (const part of parts) {
+        if (part.type !== 'literal') {
+            map[part.type] = part.value
+        }
+    }
+
+    return {
+        year: Number(map.year),
+        month: Number(map.month),
+        day: Number(map.day),
+        hour: Number(map.hour),
+        minute: Number(map.minute)
+    }
+}
+
+function toLocalDateTimeInTimeZone(value, timeZone) {
+    const date = new Date(value)
+
+    if (Number.isNaN(date.getTime())) {
+        return ''
+    }
+
+    const parts = getDatePartsInTimeZone(date, timeZone || DEFAULT_TIMEZONE)
+
+    return `${String(parts.year).padStart(4, '0')}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`
+}
 
 export function createIcsFromDraft(draft) {
     validateDraftForIcs(draft)
@@ -3825,14 +4171,20 @@ export function validateDraftForIcs(draft) {
         throw new Error('El evento debe tener zona horaria.')
     }
 
-    const start = new Date(draft.startDateTime)
-    const end = new Date(draft.endDateTime)
-
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        throw new Error('Las fechas del evento no son válidas.')
+    if (!isValidLocalDateTimeString(draft.startDateTime)) {
+        throw new Error('La fecha de inicio no es válida.')
     }
 
-    if (end.getTime() <= start.getTime()) {
+    if (!isValidLocalDateTimeString(draft.endDateTime)) {
+        throw new Error('La fecha de fin no es válida.')
+    }
+
+    const diffMinutes = getDurationMinutesBetweenLocalDateTimes(
+        draft.startDateTime,
+        draft.endDateTime
+    )
+
+    if (!Number.isFinite(diffMinutes) || diffMinutes <= 0) {
         throw new Error('La fecha de fin debe ser posterior a la de inicio.')
     }
 
@@ -3877,23 +4229,37 @@ export function validateIcsContent(icsContent) {
 }
 
 export function buildDraftFromExistingEvent(evento) {
-    const startValue = evento?.start?.dateTime || evento?.start?.date || evento?.start || ''
-    const endValue = evento?.end?.dateTime || evento?.end?.date || evento?.end || ''
+    const timeZone =
+        String(
+            evento?.timeZone ||
+                evento?.start?.timeZone ||
+                evento?.end?.timeZone ||
+                DEFAULT_TIMEZONE
+        ).trim() || DEFAULT_TIMEZONE
+
+    const startValue = evento?.startDateTime ||
+        evento?.start?.dateTime ||
+        evento?.start?.date ||
+        evento?.start ||
+        ''
+
+    const endValue = evento?.endDateTime ||
+        evento?.end?.dateTime ||
+        evento?.end?.date ||
+        evento?.end ||
+        ''
+
+    const normalizedStart = normalizeEventDateValue(startValue, timeZone)
+    const normalizedEnd = normalizeEventDateValue(endValue, timeZone)
 
     return {
         summary: String(evento?.summary || '').trim(),
         description: String(evento?.description || '').trim(),
         location: String(evento?.location || '').trim(),
-        startDateTime: normalizeEventDateValue(startValue),
-        endDateTime: normalizeEventDateValue(endValue),
-        durationMinutes: getDurationMinutes(startValue, endValue),
-        timeZone:
-            String(
-                evento?.timeZone ||
-                    evento?.start?.timeZone ||
-                    evento?.end?.timeZone ||
-                    'Europe/Dublin'
-            ).trim() || 'Europe/Dublin',
+        startDateTime: normalizedStart,
+        endDateTime: normalizedEnd,
+        durationMinutes: getDurationMinutes(normalizedStart, normalizedEnd),
+        timeZone,
         uid: String(evento?.uid || '').trim(),
         status: String(evento?.status || 'CONFIRMED').trim(),
         productId: String(evento?.productId || DEFAULT_PRODUCT_ID).trim(),
@@ -3914,32 +4280,23 @@ function buildUid(draft) {
     return `${summaryPart}-${locationPart}-${datePart}@calendar.local`
 }
 
-function normalizeEventDateValue(value) {
-    const date = new Date(value)
+function normalizeEventDateValue(value, timeZone) {
+    const raw = String(value || '').trim()
 
-    if (Number.isNaN(date.getTime())) {
+    if (!raw) {
         return ''
     }
 
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    const hours = String(date.getHours()).padStart(2, '0')
-    const minutes = String(date.getMinutes()).padStart(2, '0')
+    if (isValidLocalDateTimeString(raw)) {
+        return raw
+    }
 
-    return `${year}-${month}-${day}T${hours}:${minutes}`
+    return toLocalDateTimeInTimeZone(raw, timeZone)
 }
 
 function getDurationMinutes(startValue, endValue) {
-    const start = new Date(startValue)
-    const end = new Date(endValue)
-
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        return 60
-    }
-
-    const diff = Math.round((end.getTime() - start.getTime()) / 60000)
-    return diff > 0 ? diff : 60
+    const diff = getDurationMinutesBetweenLocalDateTimes(startValue, endValue)
+    return Number.isFinite(diff) && diff > 0 ? diff : 60
 }// src/services/eventDraftService.js
 
 import {
@@ -3947,10 +4304,59 @@ import {
     combineDateAndTime,
     formatDateForInput,
     formatTimeForInput,
-    toLocalDateTimeString
+    formatLocalDateTimeForDisplay,
+    getDurationMinutesBetweenLocalDateTimes,
+    isValidLocalDateTimeString
 } from '../utils/dateTime'
 
 const DEFAULT_PRODUCT_ID = '-//Santiago Haspert Piaggio//Calendar ICS//EN'
+const DEFAULT_TIMEZONE = 'Europe/Dublin'
+
+function pad(value) {
+    return String(value).padStart(2, '0')
+}
+
+function getDatePartsInTimeZone(date, timeZone) {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23'
+    })
+
+    const parts = formatter.formatToParts(date)
+    const map = {}
+
+    for (const part of parts) {
+        if (part.type !== 'literal') {
+            map[part.type] = part.value
+        }
+    }
+
+    return {
+        year: Number(map.year),
+        month: Number(map.month),
+        day: Number(map.day),
+        hour: Number(map.hour),
+        minute: Number(map.minute)
+    }
+}
+
+function toLocalDateTimeInTimeZone(value, timeZone) {
+    const date = new Date(value)
+
+    if (Number.isNaN(date.getTime())) {
+        return ''
+    }
+
+    const parts = getDatePartsInTimeZone(date, timeZone || DEFAULT_TIMEZONE)
+
+    return `${String(parts.year).padStart(4, '0')}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`
+}
 
 export function getDefaultDateInputValue() {
     return formatDateForInput(new Date())
@@ -3976,7 +4382,7 @@ export function createInitialDraftState({
         time: defaultStartTime || getDefaultTimeInputValue(),
         durationMinutes: String(defaultDurationMinutes || 60),
         location: '',
-        timeZone,
+        timeZone: String(timeZone || DEFAULT_TIMEZONE).trim() || DEFAULT_TIMEZONE,
         description: '',
         uid: '',
         status: 'CONFIRMED',
@@ -3987,22 +4393,30 @@ export function createInitialDraftState({
 }
 
 export function createDraftFromEvent(evento, fallbackTimeZone) {
+    const safeTimeZone =
+        String(
+            evento?.timeZone ||
+                evento?.start?.timeZone ||
+                evento?.end?.timeZone ||
+                fallbackTimeZone ||
+                DEFAULT_TIMEZONE
+        ).trim() || DEFAULT_TIMEZONE
+
     const startValue = extractEventStart(evento)
     const endValue = extractEventEnd(evento)
 
-    const startDate = parseDateSafely(startValue)
+    const normalizedStart = normalizeIncomingDateTimeValue(startValue, safeTimeZone)
+    const normalizedEnd = normalizeIncomingDateTimeValue(endValue, safeTimeZone)
 
-    const safeDate =
-        startDate && !Number.isNaN(startDate.getTime())
-            ? formatDateForInput(startDate)
-            : getDefaultDateInputValue()
+    const safeDate = normalizedStart
+        ? normalizedStart.slice(0, 10)
+        : getDefaultDateInputValue()
 
-    const safeTime =
-        startDate && !Number.isNaN(startDate.getTime())
-            ? formatTimeForInput(startDate)
-            : getDefaultTimeInputValue()
+    const safeTime = normalizedStart
+        ? normalizedStart.slice(11, 16)
+        : getDefaultTimeInputValue()
 
-    const durationMinutes = getDurationMinutesFromValues(startValue, endValue)
+    const durationMinutes = getDurationMinutesFromValues(normalizedStart, normalizedEnd)
 
     return {
         summary: String(evento?.summary || '').trim(),
@@ -4010,13 +4424,7 @@ export function createDraftFromEvent(evento, fallbackTimeZone) {
         time: safeTime,
         durationMinutes: String(durationMinutes || 60),
         location: String(evento?.location || '').trim(),
-        timeZone:
-            String(
-                evento?.timeZone ||
-                    evento?.start?.timeZone ||
-                    evento?.end?.timeZone ||
-                    fallbackTimeZone
-            ).trim() || fallbackTimeZone,
+        timeZone: safeTimeZone,
         description: String(evento?.description || '').trim(),
         uid: String(evento?.uid || '').trim(),
         status: String(evento?.status || 'CONFIRMED').trim(),
@@ -4034,13 +4442,13 @@ export function combineDateAndTimeToLocalDateTime(dateValue, timeValue) {
 
 export function buildDraftFromFormState(formState) {
     const startDateTime =
-        formState.startDateTime ||
-        combineDateAndTime(formState.date, formState.time)
+        String(formState?.startDateTime || '').trim() ||
+        combineDateAndTime(formState?.date, formState?.time)
 
-    const durationMinutes = Number(formState.durationMinutes || 0)
+    const durationMinutes = Number(formState?.durationMinutes || 0)
 
-    if (!startDateTime) {
-        throw new Error('Debes indicar fecha y hora de inicio.')
+    if (!isValidLocalDateTimeString(startDateTime)) {
+        throw new Error('Debes indicar una fecha y hora de inicio válidas.')
     }
 
     if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
@@ -4050,18 +4458,18 @@ export function buildDraftFromFormState(formState) {
     const endDateTime = addMinutesToLocalDateTime(startDateTime, durationMinutes)
 
     return normalizeDraft({
-        summary: formState.summary,
-        description: formState.description,
-        location: formState.location,
+        summary: formState?.summary,
+        description: formState?.description,
+        location: formState?.location,
         startDateTime,
         endDateTime,
         durationMinutes,
-        timeZone: formState.timeZone,
-        uid: formState.uid,
-        status: formState.status || 'CONFIRMED',
-        productId: formState.productId || DEFAULT_PRODUCT_ID,
-        categories: splitCommaValues(formState.categories),
-        notes: formState.notes
+        timeZone: formState?.timeZone,
+        uid: formState?.uid,
+        status: formState?.status || 'CONFIRMED',
+        productId: formState?.productId || DEFAULT_PRODUCT_ID,
+        categories: splitCommaValues(formState?.categories),
+        notes: formState?.notes
     })
 }
 
@@ -4069,7 +4477,7 @@ export function buildSimpleDraftFromAiPayload(payload) {
     const startDateTime = String(payload?.startDateTime || '').trim()
     const durationMinutes = Number(payload?.durationMinutes || 0)
 
-    if (!startDateTime) {
+    if (!isValidLocalDateTimeString(startDateTime)) {
         throw new Error('La IA no devolvió una fecha de inicio válida.')
     }
 
@@ -4077,9 +4485,11 @@ export function buildSimpleDraftFromAiPayload(payload) {
         throw new Error('La IA no devolvió una duración válida.')
     }
 
+    const providedEndDateTime = String(payload?.endDateTime || '').trim()
     const endDateTime =
-        String(payload?.endDateTime || '').trim() ||
-        addMinutesToLocalDateTime(startDateTime, durationMinutes)
+        isValidLocalDateTimeString(providedEndDateTime)
+            ? providedEndDateTime
+            : addMinutesToLocalDateTime(startDateTime, durationMinutes)
 
     return normalizeDraft({
         summary: payload?.summary,
@@ -4101,10 +4511,10 @@ export function createDraftSummary(draft) {
     return {
         title: draft?.summary || 'Sin título',
         start: draft?.startDateTime
-            ? toLocalDateTimeString(new Date(draft.startDateTime))
+            ? formatLocalDateTimeForDisplay(draft.startDateTime)
             : '',
         end: draft?.endDateTime
-            ? toLocalDateTimeString(new Date(draft.endDateTime))
+            ? formatLocalDateTimeForDisplay(draft.endDateTime)
             : '',
         location: draft?.location || '-',
         timeZone: draft?.timeZone || '-',
@@ -4113,20 +4523,43 @@ export function createDraftSummary(draft) {
 }
 
 export function normalizeDraft(draft) {
-    return {
+    const normalized = {
         summary: String(draft?.summary || '').trim(),
         description: String(draft?.description || '').trim(),
         location: String(draft?.location || '').trim(),
         startDateTime: String(draft?.startDateTime || '').trim(),
         endDateTime: String(draft?.endDateTime || '').trim(),
         durationMinutes: Number(draft?.durationMinutes || 0),
-        timeZone: String(draft?.timeZone || '').trim(),
+        timeZone: String(draft?.timeZone || DEFAULT_TIMEZONE).trim() || DEFAULT_TIMEZONE,
         uid: String(draft?.uid || '').trim(),
         status: String(draft?.status || 'CONFIRMED').trim(),
         productId: String(draft?.productId || DEFAULT_PRODUCT_ID).trim(),
         categories: splitCommaValues(draft?.categories),
         notes: String(draft?.notes || '').trim()
     }
+
+    if (!isValidLocalDateTimeString(normalized.startDateTime)) {
+        throw new Error('startDateTime inválido.')
+    }
+
+    if (!isValidLocalDateTimeString(normalized.endDateTime)) {
+        throw new Error('endDateTime inválido.')
+    }
+
+    const diffMinutes = getDurationMinutesBetweenLocalDateTimes(
+        normalized.startDateTime,
+        normalized.endDateTime
+    )
+
+    if (!Number.isFinite(diffMinutes) || diffMinutes <= 0) {
+        throw new Error('La fecha de fin debe ser posterior a la de inicio.')
+    }
+
+    if (!Number.isFinite(normalized.durationMinutes) || normalized.durationMinutes <= 0) {
+        normalized.durationMinutes = diffMinutes
+    }
+
+    return normalized
 }
 
 function splitCommaValues(value) {
@@ -4152,21 +4585,27 @@ function extractEventEnd(evento) {
     return evento?.end?.dateTime || evento?.end?.date || evento?.end || ''
 }
 
-function parseDateSafely(value) {
-    const date = new Date(value)
-    return Number.isNaN(date.getTime()) ? null : date
+function normalizeIncomingDateTimeValue(value, timeZone) {
+    const raw = String(value || '').trim()
+
+    if (!raw) {
+        return ''
+    }
+
+    if (isValidLocalDateTimeString(raw)) {
+        return raw
+    }
+
+    return toLocalDateTimeInTimeZone(raw, timeZone)
 }
 
 function getDurationMinutesFromValues(startValue, endValue) {
-    const start = parseDateSafely(startValue)
-    const end = parseDateSafely(endValue)
-
-    if (!start || !end) {
+    if (!startValue || !endValue) {
         return 60
     }
 
-    const diff = Math.round((end.getTime() - start.getTime()) / 60000)
-    return diff > 0 ? diff : 60
+    const diff = getDurationMinutesBetweenLocalDateTimes(startValue, endValue)
+    return Number.isFinite(diff) && diff > 0 ? diff : 60
 }// src/services/aiEventService.js
 
 export async function requestAiEventStep({ message, timeZone, conversation }) {
@@ -4277,18 +4716,460 @@ export function clearAiDraftTimezone() {
     } catch (error) {
         console.error('No se pudo limpiar la zona horaria temporal de IA:', error)
     }
+}// src/services/calendarConfigStorageService.js
+
+import { STORAGE_KEYS } from '../constants/storageKeys'
+
+function safeGetItem(key) {
+    try {
+        return window.localStorage.getItem(key)
+    } catch (error) {
+        console.error(`No se pudo leer localStorage para ${key}:`, error)
+        return null
+    }
+}
+
+function safeSetItem(key, value) {
+    try {
+        window.localStorage.setItem(key, value)
+    } catch (error) {
+        console.error(`No se pudo guardar localStorage para ${key}:`, error)
+    }
+}
+
+function safeRemoveItem(key) {
+    try {
+        window.localStorage.removeItem(key)
+    } catch (error) {
+        console.error(`No se pudo limpiar localStorage para ${key}:`, error)
+    }
+}
+
+export function saveGoogleSession({
+    accessToken,
+    expiresAt,
+    email = ''
+}) {
+    if (!accessToken || !expiresAt) {
+        throw new Error('Falta información de sesión de Google.')
+    }
+
+    safeSetItem(STORAGE_KEYS.GOOGLE_ACCESS_TOKEN, String(accessToken))
+    safeSetItem(
+        STORAGE_KEYS.GOOGLE_ACCESS_TOKEN_EXPIRES_AT,
+        String(expiresAt)
+    )
+
+    if (email) {
+        safeSetItem(STORAGE_KEYS.GOOGLE_CONNECTED_EMAIL, String(email))
+    }
+}
+
+export function getGoogleAccessToken() {
+    const token = safeGetItem(STORAGE_KEYS.GOOGLE_ACCESS_TOKEN)
+    return token ? String(token).trim() : ''
+}
+
+export function getGoogleAccessTokenExpiresAt() {
+    const raw = safeGetItem(STORAGE_KEYS.GOOGLE_ACCESS_TOKEN_EXPIRES_AT)
+    const value = Number(raw || 0)
+    return Number.isFinite(value) ? value : 0
+}
+
+export function getGoogleConnectedEmail() {
+    const value = safeGetItem(STORAGE_KEYS.GOOGLE_CONNECTED_EMAIL)
+    return value ? String(value).trim() : ''
+}
+
+export function isGoogleSessionActive() {
+    const token = getGoogleAccessToken()
+    const expiresAt = getGoogleAccessTokenExpiresAt()
+
+    if (!token || !expiresAt) {
+        return false
+    }
+
+    return Date.now() < expiresAt
+}
+
+export function clearGoogleSession() {
+    safeRemoveItem(STORAGE_KEYS.GOOGLE_ACCESS_TOKEN)
+    safeRemoveItem(STORAGE_KEYS.GOOGLE_ACCESS_TOKEN_EXPIRES_AT)
+    safeRemoveItem(STORAGE_KEYS.GOOGLE_CONNECTED_EMAIL)
+}
+
+export function saveAssignedCalendar(calendar) {
+    if (!calendar || typeof calendar !== 'object') {
+        throw new Error('No se pudo guardar el calendario asignado.')
+    }
+
+    const id = String(calendar.id || '').trim()
+    const summary = String(calendar.summary || '').trim()
+
+    if (!id) {
+        throw new Error('El calendario debe tener ID.')
+    }
+
+    safeSetItem(STORAGE_KEYS.ASSIGNED_CALENDAR_ID, id)
+    safeSetItem(STORAGE_KEYS.ASSIGNED_CALENDAR_SUMMARY, summary)
+    safeSetItem(
+        STORAGE_KEYS.ASSIGNED_CALENDAR_TIMEZONE,
+        String(calendar.timeZone || '').trim()
+    )
+    safeSetItem(
+        STORAGE_KEYS.ASSIGNED_CALENDAR_BACKGROUND,
+        String(calendar.backgroundColor || '').trim()
+    )
+    safeSetItem(
+        STORAGE_KEYS.ASSIGNED_CALENDAR_FOREGROUND,
+        String(calendar.foregroundColor || '').trim()
+    )
+}
+
+export function getAssignedCalendar() {
+    const id = safeGetItem(STORAGE_KEYS.ASSIGNED_CALENDAR_ID)
+
+    if (!id) {
+        return null
+    }
+
+    return {
+        id: String(id).trim(),
+        summary: String(
+            safeGetItem(STORAGE_KEYS.ASSIGNED_CALENDAR_SUMMARY) || ''
+        ).trim(),
+        timeZone: String(
+            safeGetItem(STORAGE_KEYS.ASSIGNED_CALENDAR_TIMEZONE) || ''
+        ).trim(),
+        backgroundColor: String(
+            safeGetItem(STORAGE_KEYS.ASSIGNED_CALENDAR_BACKGROUND) || ''
+        ).trim(),
+        foregroundColor: String(
+            safeGetItem(STORAGE_KEYS.ASSIGNED_CALENDAR_FOREGROUND) || ''
+        ).trim()
+    }
+}
+
+export function hasAssignedCalendar() {
+    const calendar = getAssignedCalendar()
+    return Boolean(calendar?.id)
+}
+
+export function clearAssignedCalendar() {
+    safeRemoveItem(STORAGE_KEYS.ASSIGNED_CALENDAR_ID)
+    safeRemoveItem(STORAGE_KEYS.ASSIGNED_CALENDAR_SUMMARY)
+    safeRemoveItem(STORAGE_KEYS.ASSIGNED_CALENDAR_TIMEZONE)
+    safeRemoveItem(STORAGE_KEYS.ASSIGNED_CALENDAR_BACKGROUND)
+    safeRemoveItem(STORAGE_KEYS.ASSIGNED_CALENDAR_FOREGROUND)
+}
+
+export function clearFullCalendarConnection() {
+    clearAssignedCalendar()
+    clearGoogleSession()
+}// src/services/googleCalendarConnectionService.js
+
+import {
+    clearFullCalendarConnection,
+    getGoogleAccessToken,
+    getGoogleConnectedEmail,
+    isGoogleSessionActive,
+    saveAssignedCalendar,
+    saveGoogleSession
+} from './calendarConfigStorageService'
+
+const GOOGLE_IDENTITY_SCRIPT_URL = 'https://accounts.google.com/gsi/client'
+const GOOGLE_CALENDAR_SCOPE =
+    'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email'
+
+let googleScriptPromise = null
+
+function getGoogleClientId() {
+    return import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+}
+
+function ensureGoogleClientId() {
+    const clientId = getGoogleClientId()
+
+    if (!clientId) {
+        throw new Error(
+            'Falta VITE_GOOGLE_CLIENT_ID. Revisa la configuración del frontend.'
+        )
+    }
+
+    return clientId
+}
+
+function loadGoogleIdentityScript() {
+    if (googleScriptPromise) {
+        return googleScriptPromise
+    }
+
+    googleScriptPromise = new Promise((resolve, reject) => {
+        if (window.google?.accounts?.oauth2) {
+            resolve()
+            return
+        }
+
+        const existing = document.querySelector(
+            `script[src="${GOOGLE_IDENTITY_SCRIPT_URL}"]`
+        )
+
+        if (existing) {
+            existing.addEventListener('load', () => resolve(), { once: true })
+            existing.addEventListener(
+                'error',
+                () => reject(new Error('No se pudo cargar Google Identity Services.')),
+                { once: true }
+            )
+            return
+        }
+
+        const script = document.createElement('script')
+        script.src = GOOGLE_IDENTITY_SCRIPT_URL
+        script.async = true
+        script.defer = true
+        script.onload = () => resolve()
+        script.onerror = () =>
+            reject(new Error('No se pudo cargar Google Identity Services.'))
+
+        document.head.appendChild(script)
+    })
+
+    return googleScriptPromise
+}
+
+function requestAccessTokenInteractive() {
+    return new Promise((resolve, reject) => {
+        const clientId = ensureGoogleClientId()
+
+        if (!window.google?.accounts?.oauth2) {
+            reject(new Error('Google Identity Services no está disponible.'))
+            return
+        }
+
+        const tokenClient = window.google.accounts.oauth2.initTokenClient({
+            client_id: clientId,
+            scope: GOOGLE_CALENDAR_SCOPE,
+            prompt: 'consent',
+            callback: (response) => {
+                if (!response || response.error) {
+                    reject(
+                        new Error(
+                            response?.error_description ||
+                            response?.error ||
+                            'Google no devolvió un token válido.'
+                        )
+                    )
+                    return
+                }
+
+                const accessToken = String(response.access_token || '').trim()
+                const expiresInSeconds = Number(response.expires_in || 0)
+
+                if (!accessToken || !Number.isFinite(expiresInSeconds) || expiresInSeconds <= 0) {
+                    reject(new Error('Google devolvió un token inválido.'))
+                    return
+                }
+
+                resolve({
+                    accessToken,
+                    expiresAt: Date.now() + expiresInSeconds * 1000
+                })
+            }
+        })
+
+        tokenClient.requestAccessToken()
+    })
+}
+
+async function fetchGoogleJson(url, accessToken) {
+    const res = await fetch(url, {
+        headers: {
+            Authorization: `Bearer ${accessToken}`
+        }
+    })
+
+    const contentType = res.headers.get('content-type') || ''
+
+    if (!res.ok) {
+        let detail = res.statusText
+
+        try {
+            if (contentType.includes('application/json')) {
+                const json = await res.json()
+                detail =
+                    json?.error?.message ||
+                    json?.error_description ||
+                    JSON.stringify(json)
+            } else {
+                detail = await res.text()
+            }
+        } catch (error) {
+            console.error('No se pudo leer el error de Google:', error)
+        }
+
+        throw new Error(`Error ${res.status}: ${detail}`)
+    }
+
+    if (!contentType.includes('application/json')) {
+        throw new Error('Google devolvió una respuesta no JSON.')
+    }
+
+    return res.json()
+}
+
+export async function ensureGoogleCalendarConnection() {
+    await loadGoogleIdentityScript()
+
+    const session = await requestAccessTokenInteractive()
+
+    let email = ''
+
+    try {
+        const me = await fetchGoogleJson(
+            'https://www.googleapis.com/oauth2/v2/userinfo',
+            session.accessToken
+        )
+
+        email = String(me?.email || '').trim()
+    } catch (error) {
+        console.error('No se pudo obtener el email del usuario Google:', error)
+    }
+
+    saveGoogleSession({
+        accessToken: session.accessToken,
+        expiresAt: session.expiresAt,
+        email
+    })
+
+    return {
+        accessToken: session.accessToken,
+        expiresAt: session.expiresAt,
+        email
+    }
+}
+
+export async function listAccessibleCalendars() {
+    const accessToken = getGoogleAccessToken()
+
+    if (!accessToken || !isGoogleSessionActive()) {
+        throw new Error('La sesión de Google no está activa.')
+    }
+
+    const json = await fetchGoogleJson(
+        'https://www.googleapis.com/calendar/v3/users/me/calendarList',
+        accessToken
+    )
+
+    return Array.isArray(json?.items)
+        ? json.items.map((item) => ({
+            id: String(item.id || '').trim(),
+            summary: String(item.summary || '').trim(),
+            description: String(item.description || '').trim(),
+            timeZone: String(item.timeZone || '').trim(),
+            primary: Boolean(item.primary),
+            accessRole: String(item.accessRole || '').trim(),
+            backgroundColor: String(item.backgroundColor || '').trim(),
+            foregroundColor: String(item.foregroundColor || '').trim()
+        }))
+        : []
+}
+
+export async function connectAndFetchCalendars() {
+    await ensureGoogleCalendarConnection()
+    return listAccessibleCalendars()
+}
+
+export function assignCalendar(calendar) {
+    saveAssignedCalendar(calendar)
+}
+
+export function disconnectGoogleCalendar() {
+    const token = getGoogleAccessToken()
+
+    if (token && window.google?.accounts?.oauth2?.revoke) {
+        try {
+            window.google.accounts.oauth2.revoke(token, () => {
+                clearFullCalendarConnection()
+            })
+            return
+        } catch (error) {
+            console.error('No se pudo revocar el token de Google:', error)
+        }
+    }
+
+    clearFullCalendarConnection()
+}
+
+export function getGoogleConnectionSummary() {
+    return {
+        active: isGoogleSessionActive(),
+        email: getGoogleConnectedEmail()
+    }
 }// src/services/calendarService.js
+
+import {
+    clearFullCalendarConnection,
+    getAssignedCalendar,
+    getGoogleAccessToken,
+    isGoogleSessionActive
+} from './calendarConfigStorageService'
 
 const API_BASE = '/api/eventos'
 const ICS_BASE = '/api/ics'
 
-async function handleJsonResponse(res) {
-    if (!res.ok) {
-        const text = await res.text().catch(() => res.statusText)
-        throw new Error(`Error ${res.status}: ${text}`)
+function buildAuthorizedHeaders(extraHeaders = {}) {
+    const accessToken = getGoogleAccessToken()
+    const assignedCalendar = getAssignedCalendar()
+
+    if (!accessToken || !isGoogleSessionActive()) {
+        throw new Error('La sesión de Google no está activa. Debes asignar un calendario otra vez.')
     }
 
+    if (!assignedCalendar?.id) {
+        throw new Error('No hay un calendario asignado.')
+    }
+
+    return {
+        Authorization: `Bearer ${accessToken}`,
+        'X-Calendar-Id': assignedCalendar.id,
+        ...extraHeaders
+    }
+}
+
+async function parseErrorDetail(res, contentType) {
+    try {
+        if (contentType.includes('application/json')) {
+            const json = await res.json()
+
+            return (
+                json?.errorDetail ||
+                json?.error ||
+                json?.message ||
+                JSON.stringify(json)
+            )
+        }
+
+        const text = await res.text()
+        return text || res.statusText
+    } catch (error) {
+        console.error('No se pudo interpretar el error de la API:', error)
+        return res.statusText || 'Error desconocido'
+    }
+}
+
+async function handleJsonResponse(res) {
     const contentType = res.headers.get('content-type') || ''
+
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res, contentType)
+
+        if (res.status === 401 || res.status === 403) {
+            clearFullCalendarConnection()
+        }
+
+        throw new Error(`Error ${res.status}: ${detail}`)
+    }
 
     if (contentType.includes('application/json')) {
         return res.json()
@@ -4298,14 +5179,19 @@ async function handleJsonResponse(res) {
 }
 
 async function getEventos() {
-    const res = await fetch(API_BASE)
+    const res = await fetch(API_BASE, {
+        headers: buildAuthorizedHeaders()
+    })
+
     return handleJsonResponse(res)
 }
 
 async function createEventoFromDraft(draft, icsContent) {
     const res = await fetch(API_BASE, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildAuthorizedHeaders({
+            'Content-Type': 'application/json'
+        }),
         body: JSON.stringify({
             draft,
             icsContent,
@@ -4319,7 +5205,9 @@ async function createEventoFromDraft(draft, icsContent) {
 async function updateEventoFromDraft(id, draft, icsContent) {
     const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildAuthorizedHeaders({
+            'Content-Type': 'application/json'
+        }),
         body: JSON.stringify({
             draft,
             icsContent,
@@ -4332,12 +5220,21 @@ async function updateEventoFromDraft(id, draft, icsContent) {
 
 async function deleteEvento(id) {
     const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: buildAuthorizedHeaders()
     })
 
     if (!res.ok) {
-        const text = await res.text().catch(() => res.statusText)
-        throw new Error(`Error ${res.status}: ${text}`)
+        const detail = await parseErrorDetail(
+            res,
+            res.headers.get('content-type') || ''
+        )
+
+        if (res.status === 401 || res.status === 403) {
+            clearFullCalendarConnection()
+        }
+
+        throw new Error(`Error ${res.status}: ${detail}`)
     }
 
     return true
@@ -4346,7 +5243,9 @@ async function deleteEvento(id) {
 async function importIcs(icsContent) {
     const res = await fetch(`${ICS_BASE}/import`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildAuthorizedHeaders({
+            'Content-Type': 'application/json'
+        }),
         body: JSON.stringify({ icsContent })
     })
 
@@ -4355,12 +5254,21 @@ async function importIcs(icsContent) {
 
 async function downloadAllEventosIcs() {
     const res = await fetch(`${ICS_BASE}/export`, {
-        method: 'GET'
+        method: 'GET',
+        headers: buildAuthorizedHeaders()
     })
 
     if (!res.ok) {
-        const text = await res.text().catch(() => res.statusText)
-        throw new Error(`Error ${res.status}: ${text}`)
+        const detail = await parseErrorDetail(
+            res,
+            res.headers.get('content-type') || ''
+        )
+
+        if (res.status === 401 || res.status === 403) {
+            clearFullCalendarConnection()
+        }
+
+        throw new Error(`Error ${res.status}: ${detail}`)
     }
 
     const blob = await res.blob()

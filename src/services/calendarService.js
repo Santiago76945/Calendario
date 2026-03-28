@@ -29,25 +29,32 @@ function buildAuthorizedHeaders(extraHeaders = {}) {
     }
 }
 
+async function parseErrorDetail(res, contentType) {
+    try {
+        if (contentType.includes('application/json')) {
+            const json = await res.json()
+
+            return (
+                json?.errorDetail ||
+                json?.error ||
+                json?.message ||
+                JSON.stringify(json)
+            )
+        }
+
+        const text = await res.text()
+        return text || res.statusText
+    } catch (error) {
+        console.error('No se pudo interpretar el error de la API:', error)
+        return res.statusText || 'Error desconocido'
+    }
+}
+
 async function handleJsonResponse(res) {
     const contentType = res.headers.get('content-type') || ''
 
     if (!res.ok) {
-        let detail = res.statusText
-
-        try {
-            if (contentType.includes('application/json')) {
-                const json = await res.json()
-                detail =
-                    json?.error ||
-                    json?.message ||
-                    JSON.stringify(json)
-            } else {
-                detail = await res.text()
-            }
-        } catch (error) {
-            console.error('No se pudo interpretar el error de la API:', error)
-        }
+        const detail = await parseErrorDetail(res, contentType)
 
         if (res.status === 401 || res.status === 403) {
             clearFullCalendarConnection()
@@ -63,8 +70,22 @@ async function handleJsonResponse(res) {
     return null
 }
 
-async function getEventos() {
-    const res = await fetch(API_BASE, {
+function buildEventosUrl({ pageToken = '', pageSize } = {}) {
+    const url = new URL(API_BASE, window.location.origin)
+
+    if (String(pageToken || '').trim()) {
+        url.searchParams.set('pageToken', String(pageToken).trim())
+    }
+
+    if (Number.isFinite(Number(pageSize))) {
+        url.searchParams.set('pageSize', String(Math.trunc(Number(pageSize))))
+    }
+
+    return `${url.pathname}${url.search}`
+}
+
+async function getEventos(options = {}) {
+    const res = await fetch(buildEventosUrl(options), {
         headers: buildAuthorizedHeaders()
     })
 
@@ -110,13 +131,16 @@ async function deleteEvento(id) {
     })
 
     if (!res.ok) {
-        const text = await res.text().catch(() => res.statusText)
+        const detail = await parseErrorDetail(
+            res,
+            res.headers.get('content-type') || ''
+        )
 
         if (res.status === 401 || res.status === 403) {
             clearFullCalendarConnection()
         }
 
-        throw new Error(`Error ${res.status}: ${text}`)
+        throw new Error(`Error ${res.status}: ${detail}`)
     }
 
     return true
@@ -141,13 +165,16 @@ async function downloadAllEventosIcs() {
     })
 
     if (!res.ok) {
-        const text = await res.text().catch(() => res.statusText)
+        const detail = await parseErrorDetail(
+            res,
+            res.headers.get('content-type') || ''
+        )
 
         if (res.status === 401 || res.status === 403) {
             clearFullCalendarConnection()
         }
 
-        throw new Error(`Error ${res.status}: ${text}`)
+        throw new Error(`Error ${res.status}: ${detail}`)
     }
 
     const blob = await res.blob()

@@ -1,6 +1,7 @@
 // functions/ics/import.cjs
 
 const { crearEventoDesdeDraft } = require('../eventos/googleCalendarService.cjs')
+const { parseIcsToDraft } = require('../lib/ics/parseIcsToDraft.cjs')
 
 function jsonHeaders() {
     return {
@@ -58,83 +59,6 @@ function getRequestContext(event) {
     return { accessToken, calendarId }
 }
 
-function getMatch(content, regex) {
-    const match = content.match(regex)
-    return match ? match[1].trim() : ''
-}
-
-function unescapeIcsText(value) {
-    return String(value || '')
-        .replace(/\\n/g, '\n')
-        .replace(/\\,/g, ',')
-        .replace(/\\;/g, ';')
-        .replace(/\\\\/g, '\\')
-}
-
-function parseIcsToDraft(icsContent) {
-    const content = String(icsContent || '')
-
-    if (!content.includes('BEGIN:VCALENDAR') || !content.includes('BEGIN:VEVENT')) {
-        throw new Error('El contenido ICS no contiene un VEVENT válido.')
-    }
-
-    const summary = unescapeIcsText(getMatch(content, /SUMMARY:(.+)/))
-    const location = unescapeIcsText(getMatch(content, /LOCATION:(.+)/))
-    const description = unescapeIcsText(getMatch(content, /DESCRIPTION:(.+)/))
-    const uid = unescapeIcsText(getMatch(content, /UID:(.+)/))
-    const status = unescapeIcsText(getMatch(content, /STATUS:(.+)/)) || 'CONFIRMED'
-
-    const dtStartMatch = content.match(/DTSTART(?:;TZID=([^:]+))?:(.+)/)
-    const dtEndMatch = content.match(/DTEND(?:;TZID=([^:]+))?:(.+)/)
-
-    if (!dtStartMatch || !dtEndMatch) {
-        throw new Error('El contenido ICS debe incluir DTSTART y DTEND.')
-    }
-
-    const timeZone =
-        (dtStartMatch[1] || dtEndMatch[1] || 'Europe/Dublin').trim()
-
-    const startDateTime = normalizeIcsDateTime(dtStartMatch[2])
-    const endDateTime = normalizeIcsDateTime(dtEndMatch[2])
-
-    const start = new Date(startDateTime)
-    const end = new Date(endDateTime)
-    const durationMinutes = Math.max(
-        1,
-        Math.round((end.getTime() - start.getTime()) / 60000)
-    )
-
-    return {
-        summary,
-        description,
-        location,
-        startDateTime,
-        endDateTime,
-        durationMinutes,
-        timeZone,
-        uid,
-        status,
-        productId: '-//Santiago Haspert Piaggio//Calendar ICS//EN',
-        categories: [],
-        notes: ''
-    }
-}
-
-function normalizeIcsDateTime(value) {
-    const clean = String(value || '').trim().replace(/Z$/, '')
-
-    const match = clean.match(
-        /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/
-    )
-
-    if (!match) {
-        throw new Error(`No se pudo interpretar la fecha ICS: ${value}`)
-    }
-
-    const [, year, month, day, hours, minutes] = match
-    return `${year}-${month}-${day}T${hours}:${minutes}`
-}
-
 exports.handler = async function (event) {
     const headers = jsonHeaders()
 
@@ -163,7 +87,10 @@ exports.handler = async function (event) {
             throw new Error('Debes enviar contenido ICS.')
         }
 
-        const draft = parseIcsToDraft(icsContent)
+        const draft = parseIcsToDraft(icsContent, {
+            fallbackTimeZone: 'Europe/Dublin'
+        })
+
         const created = await crearEventoDesdeDraft({
             ...ctx,
             draft

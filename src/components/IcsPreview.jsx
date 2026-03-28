@@ -9,6 +9,7 @@ export default function IcsPreview({
     draft,
     isEditing,
     isSubmitting,
+    submitError,
     onBackToEdit,
     onConfirm,
     onCancel
@@ -30,6 +31,21 @@ export default function IcsPreview({
 
     return (
         <div style={{ padding: '1.5rem' }}>
+            {submitError ? (
+                <div
+                    style={{
+                        marginBottom: '1rem',
+                        color: '#991b1b',
+                        background: '#fef2f2',
+                        border: '1px solid #fecaca',
+                        borderRadius: '10px',
+                        padding: '0.85rem 1rem'
+                    }}
+                >
+                    {submitError}
+                </div>
+            ) : null}
+
             <div
                 style={{
                     display: 'grid',
@@ -48,8 +64,8 @@ export default function IcsPreview({
                     <h4 style={{ marginTop: 0 }}>Resumen</h4>
 
                     <p><strong>Título:</strong> {summary.title}</p>
-                    <p><strong>Inicio:</strong> {tryFormatHumanDateTime(summary.start)}</p>
-                    <p><strong>Fin:</strong> {tryFormatHumanDateTime(summary.end)}</p>
+                    <p><strong>Inicio:</strong> {tryFormatHumanDateTime(summary.start, undefined, summary.timeZone)}</p>
+                    <p><strong>Fin:</strong> {tryFormatHumanDateTime(summary.end, undefined, summary.timeZone)}</p>
                     <p><strong>Duración:</strong> {summary.durationMinutes} minutos</p>
                     <p><strong>Lugar:</strong> {summary.location}</p>
                     <p><strong>Zona horaria:</strong> {summary.timeZone}</p>

@@ -18,11 +18,11 @@ src
 │   └── timezones.js
 ├── docs
 │   ├── ai-event-behaviour.md
-│   ├── auth-behaviour-and-calendar-assignment.md
+│   ├── auth-and-calendar.md
 │   ├── calendar-connection-flow.md
 │   ├── comandos.md
-│   ├── environment-variables-reference.md
 │   ├── manual-event-behaviour.md
+│   ├── package-and-netlify-context.md
 │   └── tree.md
 ├── index.css
 ├── main.jsx
@@ -47,6 +47,8 @@ src
     ├── dateTime.js
     └── icsText.js
 
+8 directories, 38 files
+(base) ➜  Calendario git:(main) ✗ tree functions
 functions
 ├── ai
 │   └── event-draft.cjs
@@ -59,6 +61,9 @@ functions
 ├── ics
 │   ├── export.cjs
 │   └── import.cjs
+├── lib
+│   └── ics
+│       └── parseIcsToDraft.cjs
 ├── oauth2-callback.cjs
 ├── oauth2-initiateAuth.cjs
 └── services

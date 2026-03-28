@@ -1,9 +1,61 @@
 // src/services/icsService.js
 
-import { formatIcsDateTimeLocal, formatIcsUtcStamp } from '../utils/dateTime'
+import {
+    formatIcsDateTimeLocal,
+    formatIcsUtcStamp,
+    getDurationMinutesBetweenLocalDateTimes,
+    isValidLocalDateTimeString
+} from '../utils/dateTime'
 import { buildIcsLines, escapeIcsText, sanitizeUidPart } from '../utils/icsText'
 
 const DEFAULT_PRODUCT_ID = '-//Santiago Haspert Piaggio//Calendar ICS//EN'
+const DEFAULT_TIMEZONE = 'Europe/Dublin'
+
+function pad(value) {
+    return String(value).padStart(2, '0')
+}
+
+function getDatePartsInTimeZone(date, timeZone) {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23'
+    })
+
+    const parts = formatter.formatToParts(date)
+    const map = {}
+
+    for (const part of parts) {
+        if (part.type !== 'literal') {
+            map[part.type] = part.value
+        }
+    }
+
+    return {
+        year: Number(map.year),
+        month: Number(map.month),
+        day: Number(map.day),
+        hour: Number(map.hour),
+        minute: Number(map.minute)
+    }
+}
+
+function toLocalDateTimeInTimeZone(value, timeZone) {
+    const date = new Date(value)
+
+    if (Number.isNaN(date.getTime())) {
+        return ''
+    }
+
+    const parts = getDatePartsInTimeZone(date, timeZone || DEFAULT_TIMEZONE)
+
+    return `${String(parts.year).padStart(4, '0')}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`
+}
 
 export function createIcsFromDraft(draft) {
     validateDraftForIcs(draft)
@@ -76,14 +128,20 @@ export function validateDraftForIcs(draft) {
         throw new Error('El evento debe tener zona horaria.')
     }
 
-    const start = new Date(draft.startDateTime)
-    const end = new Date(draft.endDateTime)
-
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        throw new Error('Las fechas del evento no son válidas.')
+    if (!isValidLocalDateTimeString(draft.startDateTime)) {
+        throw new Error('La fecha de inicio no es válida.')
     }
 
-    if (end.getTime() <= start.getTime()) {
+    if (!isValidLocalDateTimeString(draft.endDateTime)) {
+        throw new Error('La fecha de fin no es válida.')
+    }
+
+    const diffMinutes = getDurationMinutesBetweenLocalDateTimes(
+        draft.startDateTime,
+        draft.endDateTime
+    )
+
+    if (!Number.isFinite(diffMinutes) || diffMinutes <= 0) {
         throw new Error('La fecha de fin debe ser posterior a la de inicio.')
     }
 
@@ -128,23 +186,37 @@ export function validateIcsContent(icsContent) {
 }
 
 export function buildDraftFromExistingEvent(evento) {
-    const startValue = evento?.start?.dateTime || evento?.start?.date || evento?.start || ''
-    const endValue = evento?.end?.dateTime || evento?.end?.date || evento?.end || ''
+    const timeZone =
+        String(
+            evento?.timeZone ||
+                evento?.start?.timeZone ||
+                evento?.end?.timeZone ||
+                DEFAULT_TIMEZONE
+        ).trim() || DEFAULT_TIMEZONE
+
+    const startValue = evento?.startDateTime ||
+        evento?.start?.dateTime ||
+        evento?.start?.date ||
+        evento?.start ||
+        ''
+
+    const endValue = evento?.endDateTime ||
+        evento?.end?.dateTime ||
+        evento?.end?.date ||
+        evento?.end ||
+        ''
+
+    const normalizedStart = normalizeEventDateValue(startValue, timeZone)
+    const normalizedEnd = normalizeEventDateValue(endValue, timeZone)
 
     return {
         summary: String(evento?.summary || '').trim(),
         description: String(evento?.description || '').trim(),
         location: String(evento?.location || '').trim(),
-        startDateTime: normalizeEventDateValue(startValue),
-        endDateTime: normalizeEventDateValue(endValue),
-        durationMinutes: getDurationMinutes(startValue, endValue),
-        timeZone:
-            String(
-                evento?.timeZone ||
-                    evento?.start?.timeZone ||
-                    evento?.end?.timeZone ||
-                    'Europe/Dublin'
-            ).trim() || 'Europe/Dublin',
+        startDateTime: normalizedStart,
+        endDateTime: normalizedEnd,
+        durationMinutes: getDurationMinutes(normalizedStart, normalizedEnd),
+        timeZone,
         uid: String(evento?.uid || '').trim(),
         status: String(evento?.status || 'CONFIRMED').trim(),
         productId: String(evento?.productId || DEFAULT_PRODUCT_ID).trim(),
@@ -165,30 +237,21 @@ function buildUid(draft) {
     return `${summaryPart}-${locationPart}-${datePart}@calendar.local`
 }
 
-function normalizeEventDateValue(value) {
-    const date = new Date(value)
+function normalizeEventDateValue(value, timeZone) {
+    const raw = String(value || '').trim()
 
-    if (Number.isNaN(date.getTime())) {
+    if (!raw) {
         return ''
     }
 
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    const hours = String(date.getHours()).padStart(2, '0')
-    const minutes = String(date.getMinutes()).padStart(2, '0')
+    if (isValidLocalDateTimeString(raw)) {
+        return raw
+    }
 
-    return `${year}-${month}-${day}T${hours}:${minutes}`
+    return toLocalDateTimeInTimeZone(raw, timeZone)
 }
 
 function getDurationMinutes(startValue, endValue) {
-    const start = new Date(startValue)
-    const end = new Date(endValue)
-
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        return 60
-    }
-
-    const diff = Math.round((end.getTime() - start.getTime()) / 60000)
-    return diff > 0 ? diff : 60
+    const diff = getDurationMinutesBetweenLocalDateTimes(startValue, endValue)
+    return Number.isFinite(diff) && diff > 0 ? diff : 60
 }

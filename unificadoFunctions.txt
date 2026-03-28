@@ -218,7 +218,7 @@ function jsonHeaders() {
     return {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Calendar-Id',
         'Access-Control-Allow-Methods': 'PUT,DELETE,OPTIONS'
     }
 }
@@ -239,6 +239,43 @@ function getIdFromPath(path) {
         .filter(Boolean)
 
     return parts[parts.length - 1] || ''
+}
+
+function extractAccessToken(event) {
+    const authorization =
+        event?.headers?.authorization ||
+        event?.headers?.Authorization ||
+        ''
+
+    const match = String(authorization).match(/^Bearer\s+(.+)$/i)
+    return match ? match[1].trim() : ''
+}
+
+function extractCalendarId(event) {
+    return String(
+        event?.headers?.['x-calendar-id'] ||
+            event?.headers?.['X-Calendar-Id'] ||
+            ''
+    ).trim()
+}
+
+function getRequestContext(event) {
+    const accessToken = extractAccessToken(event)
+    const calendarId = extractCalendarId(event)
+
+    if (!accessToken) {
+        const error = new Error('Falta Authorization Bearer token.')
+        error.statusCode = 401
+        throw error
+    }
+
+    if (!calendarId) {
+        const error = new Error('Falta el header X-Calendar-Id.')
+        error.statusCode = 400
+        throw error
+    }
+
+    return { accessToken, calendarId }
 }
 
 exports.handler = async function (event) {
@@ -264,6 +301,7 @@ exports.handler = async function (event) {
 
     if (event.httpMethod === 'PUT') {
         try {
+            const ctx = getRequestContext(event)
             const payload = parseBody(event.body)
 
             if (!payload?.draft || typeof payload.draft !== 'object') {
@@ -274,7 +312,11 @@ exports.handler = async function (event) {
                 throw new Error('Falta el contenido ICS.')
             }
 
-            const actualizado = await actualizarEventoDesdeDraft(id, payload.draft)
+            const actualizado = await actualizarEventoDesdeDraft({
+                ...ctx,
+                id,
+                draft: payload.draft
+            })
 
             return {
                 statusCode: 200,
@@ -284,7 +326,7 @@ exports.handler = async function (event) {
         } catch (err) {
             console.error(err)
             return {
-                statusCode: 400,
+                statusCode: err.statusCode || 400,
                 headers,
                 body: JSON.stringify({
                     error: err.message || 'Error al actualizar evento'
@@ -295,7 +337,12 @@ exports.handler = async function (event) {
 
     if (event.httpMethod === 'DELETE') {
         try {
-            await eliminarEvento(id)
+            const ctx = getRequestContext(event)
+
+            await eliminarEvento({
+                ...ctx,
+                id
+            })
 
             return {
                 statusCode: 204,
@@ -305,7 +352,7 @@ exports.handler = async function (event) {
         } catch (err) {
             console.error(err)
             return {
-                statusCode: 500,
+                statusCode: err.statusCode || 500,
                 headers,
                 body: JSON.stringify({
                     error: err.message || 'Error al eliminar evento'
@@ -321,137 +368,571 @@ exports.handler = async function (event) {
     }
 }// functions/oauth2-callback.cjs
 
-const { google } = require('googleapis')
+exports.handler = async function () {
+    return {
+        statusCode: 410,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            error: 'Endpoint deprecado. La app ahora usa Google Identity Services en frontend para asignar calendario.'
+        })
+    }
+}// functions/lib/ics/parseIcsToDraft.cjs
 
-const {
-    GCAL_CLIENT_ID,
-    GCAL_CLIENT_SECRET,
-    GCAL_REDIRECT_URI
-} = process.env
+const DEFAULT_TIMEZONE = 'Europe/Dublin'
+const DEFAULT_PRODUCT_ID = '-//Santiago Haspert Piaggio//Calendar ICS//EN'
 
-exports.handler = async function (event) {
-    const code = event.queryStringParameters?.code
+function unfoldIcsLines(content) {
+    return String(content || '')
+        .replace(/\r\n[ \t]/g, '')
+        .replace(/\n[ \t]/g, '')
+}
 
-    if (!GCAL_CLIENT_ID || !GCAL_CLIENT_SECRET || !GCAL_REDIRECT_URI) {
-        return {
-            statusCode: 500,
-            body: 'Faltan variables de entorno OAuth de Google Calendar.'
+function splitLines(content) {
+    return unfoldIcsLines(content)
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+}
+
+function unescapeIcsText(value) {
+    return String(value || '')
+        .replace(/\\n/g, '\n')
+        .replace(/\\,/g, ',')
+        .replace(/\\;/g, ';')
+        .replace(/\\\\/g, '\\')
+}
+
+function parsePropertyLine(line) {
+    const separatorIndex = line.indexOf(':')
+
+    if (separatorIndex === -1) {
+        return null
+    }
+
+    const left = line.slice(0, separatorIndex)
+    const value = line.slice(separatorIndex + 1)
+
+    const [rawName, ...paramParts] = left.split(';')
+    const name = String(rawName || '').trim().toUpperCase()
+
+    const params = {}
+
+    for (const part of paramParts) {
+        const [rawKey, ...rawValueParts] = part.split('=')
+        const key = String(rawKey || '').trim().toUpperCase()
+        const paramValue = rawValueParts.join('=').trim()
+
+        if (key) {
+            params[key] = paramValue
         }
     }
 
-    if (!code) {
-        return { statusCode: 400, body: 'Missing "code" parameter' }
+    return {
+        name,
+        params,
+        value
     }
+}
 
-    const oAuth2Client = new google.auth.OAuth2(
-        GCAL_CLIENT_ID,
-        GCAL_CLIENT_SECRET,
-        GCAL_REDIRECT_URI
+function getFirstProperty(properties, name) {
+    return properties.find((property) => property.name === name) || null
+}
+
+function parseNaiveIcsDateTime(value) {
+    const clean = String(value || '').trim()
+
+    const match = clean.match(
+        /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/
     )
 
-    try {
-        const { tokens } = await oAuth2Client.getToken(code)
-
-        return {
-            statusCode: 200,
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
-            body: `
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <title>Autorización completada</title>
-</head>
-<body style="font-family: sans-serif; max-width: 760px; margin: 40px auto; line-height: 1.6;">
-  <h1>Autorización completada</h1>
-  <p>Google devolvió correctamente los tokens.</p>
-  <p><strong>Importante:</strong> por seguridad, este callback ya no guarda el refresh token en localStorage.</p>
-  <p>Copia este valor y guárdalo como variable de entorno <code>GCAL_REFRESH_TOKEN</code> en Netlify o en tu entorno local:</p>
-  <pre style="white-space: pre-wrap; word-break: break-word; background: #f5f5f5; padding: 12px; border-radius: 8px;">${tokens.refresh_token || 'Google no devolvió un refresh token nuevo. Si ya habías autorizado antes sin prompt=consent, revoca acceso y vuelve a autorizar.'}</pre>
-  <p>Una vez configurado, vuelve a abrir tu app.</p>
-  <p><a href="/calendario">Ir al calendario</a></p>
-</body>
-</html>
-`
-        }
-    } catch (err) {
-        console.error('Error exchanging code:', err)
-        return {
-            statusCode: 500,
-            body: 'Error al intercambiar el código por tokens'
-        }
-    }
-}// functions/eventos/delete.cjs
-
-const { eliminarEvento } = require('./googleCalendarService.cjs')
-
-exports.handler = async function (event) {
-    const headers = {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
+    if (!match) {
+        throw new Error(`No se pudo interpretar la fecha ICS: ${value}`)
     }
 
-    if (event.httpMethod !== 'DELETE') {
-        return {
-            statusCode: 405,
-            headers,
-            body: JSON.stringify({ error: 'Método no permitido' })
+    const [, year, month, day, hours, minutes] = match
+    return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+function getDatePartsInTimeZone(date, timeZone) {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23'
+    })
+
+    const parts = formatter.formatToParts(date)
+    const map = {}
+
+    for (const part of parts) {
+        if (part.type !== 'literal') {
+            map[part.type] = part.value
         }
     }
 
-    const parts = event.path.split('/')
-    const id = parts[parts.length - 1]
-
-    try {
-        await eliminarEvento(id)
-        return {
-            statusCode: 204,
-            headers,
-            body: ''
-        }
-    } catch (err) {
-        console.error(err)
-        return {
-            statusCode: 500,
-            headers,
-            body: JSON.stringify({ error: 'Error al eliminar evento' })
-        }
+    return {
+        year: Number(map.year),
+        month: Number(map.month),
+        day: Number(map.day),
+        hour: Number(map.hour),
+        minute: Number(map.minute),
+        second: Number(map.second)
     }
 }
-// functions/eventos/googleCalendarService.cjs
+
+function formatPartsAsLocalDateTime(parts) {
+    const year = String(parts.year).padStart(4, '0')
+    const month = String(parts.month).padStart(2, '0')
+    const day = String(parts.day).padStart(2, '0')
+    const hour = String(parts.hour).padStart(2, '0')
+    const minute = String(parts.minute).padStart(2, '0')
+
+    return `${year}-${month}-${day}T${hour}:${minute}`
+}
+
+function convertUtcIcsDateTimeToLocalDateTime(value, timeZone) {
+    const clean = String(value || '').trim()
+
+    const match = clean.match(
+        /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/
+    )
+
+    if (!match) {
+        throw new Error(`No se pudo interpretar la fecha ICS UTC: ${value}`)
+    }
+
+    const [, year, month, day, hours, minutes, seconds] = match
+
+    const date = new Date(
+        Date.UTC(
+            Number(year),
+            Number(month) - 1,
+            Number(day),
+            Number(hours),
+            Number(minutes),
+            Number(seconds)
+        )
+    )
+
+    return formatPartsAsLocalDateTime(getDatePartsInTimeZone(date, timeZone))
+}
+
+function toUtcMinutesFromLocalDateTime(localDateTime) {
+    const match = String(localDateTime || '')
+        .trim()
+        .match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/)
+
+    if (!match) {
+        return NaN
+    }
+
+    const [, year, month, day, hours, minutes] = match
+
+    return Math.round(
+        Date.UTC(
+            Number(year),
+            Number(month) - 1,
+            Number(day),
+            Number(hours),
+            Number(minutes),
+            0,
+            0
+        ) / 60000
+    )
+}
+
+function getDurationMinutes(startDateTime, endDateTime) {
+    const startMinutes = toUtcMinutesFromLocalDateTime(startDateTime)
+    const endMinutes = toUtcMinutesFromLocalDateTime(endDateTime)
+
+    if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) {
+        return 60
+    }
+
+    const diff = endMinutes - startMinutes
+    return diff > 0 ? diff : 60
+}
+
+function normalizeDateTimeValue(value, timeZone) {
+    const clean = String(value || '').trim()
+
+    if (!clean) {
+        throw new Error('La propiedad ICS no tiene fecha.')
+    }
+
+    if (clean.endsWith('Z')) {
+        return convertUtcIcsDateTimeToLocalDateTime(clean, timeZone)
+    }
+
+    return parseNaiveIcsDateTime(clean)
+}
+
+function parseIcsToDraft(icsContent, options = {}) {
+    const fallbackTimeZone =
+        String(options?.fallbackTimeZone || DEFAULT_TIMEZONE).trim() ||
+        DEFAULT_TIMEZONE
+
+    const lines = splitLines(icsContent)
+
+    if (
+        !lines.includes('BEGIN:VCALENDAR') ||
+        !lines.includes('BEGIN:VEVENT') ||
+        !lines.includes('END:VEVENT') ||
+        !lines.includes('END:VCALENDAR')
+    ) {
+        throw new Error('El contenido ICS no contiene un VEVENT válido.')
+    }
+
+    const veventStart = lines.indexOf('BEGIN:VEVENT')
+    const veventEnd = lines.indexOf('END:VEVENT')
+
+    if (veventStart === -1 || veventEnd === -1 || veventEnd <= veventStart) {
+        throw new Error('No se pudo aislar el bloque VEVENT del ICS.')
+    }
+
+    const eventLines = lines.slice(veventStart + 1, veventEnd)
+    const properties = eventLines
+        .map(parsePropertyLine)
+        .filter(Boolean)
+
+    const summaryProp = getFirstProperty(properties, 'SUMMARY')
+    const descriptionProp = getFirstProperty(properties, 'DESCRIPTION')
+    const locationProp = getFirstProperty(properties, 'LOCATION')
+    const uidProp = getFirstProperty(properties, 'UID')
+    const statusProp = getFirstProperty(properties, 'STATUS')
+    const productIdProp = getFirstProperty(properties, 'PRODID')
+    const categoriesProp = getFirstProperty(properties, 'CATEGORIES')
+    const dtStartProp = getFirstProperty(properties, 'DTSTART')
+    const dtEndProp = getFirstProperty(properties, 'DTEND')
+
+    if (!dtStartProp || !dtEndProp) {
+        throw new Error('El contenido ICS debe incluir DTSTART y DTEND.')
+    }
+
+    const timeZone =
+        String(
+            dtStartProp.params.TZID ||
+                dtEndProp.params.TZID ||
+                fallbackTimeZone
+        ).trim() || fallbackTimeZone
+
+    const startDateTime = normalizeDateTimeValue(dtStartProp.value, timeZone)
+    const endDateTime = normalizeDateTimeValue(dtEndProp.value, timeZone)
+    const durationMinutes = getDurationMinutes(startDateTime, endDateTime)
+
+    return {
+        summary: unescapeIcsText(summaryProp?.value || '').trim(),
+        description: unescapeIcsText(descriptionProp?.value || '').trim(),
+        location: unescapeIcsText(locationProp?.value || '').trim(),
+        startDateTime,
+        endDateTime,
+        durationMinutes,
+        timeZone,
+        uid: unescapeIcsText(uidProp?.value || '').trim(),
+        status: unescapeIcsText(statusProp?.value || 'CONFIRMED').trim() || 'CONFIRMED',
+        productId:
+            unescapeIcsText(productIdProp?.value || '').trim() || DEFAULT_PRODUCT_ID,
+        categories: String(unescapeIcsText(categoriesProp?.value || ''))
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+        notes: ''
+    }
+}
+
+module.exports = {
+    parseIcsToDraft
+}// functions/eventos/delete.cjs
+
+exports.handler = async function () {
+    return {
+        statusCode: 410,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            error: 'Endpoint deprecado. Usa /api/eventos/:id con método DELETE.'
+        })
+    }
+}// functions/eventos/googleCalendarService.cjs
 
 const { google } = require('googleapis')
 
-const {
-    GCAL_CLIENT_ID,
-    GCAL_CLIENT_SECRET,
-    GCAL_REDIRECT_URI,
-    GCAL_REFRESH_TOKEN,
-    CALENDAR_ID = 'primary',
-    TIMEZONE = 'Europe/Dublin'
-} = process.env
+const { TIMEZONE = 'Europe/Dublin' } = process.env
 
-const oAuth2Client = new google.auth.OAuth2(
-    GCAL_CLIENT_ID,
-    GCAL_CLIENT_SECRET,
-    GCAL_REDIRECT_URI
-)
-
-if (GCAL_REFRESH_TOKEN) {
-    oAuth2Client.setCredentials({ refresh_token: GCAL_REFRESH_TOKEN })
+function ensureAccessToken(accessToken) {
+    if (!String(accessToken || '').trim()) {
+        throw new Error('Falta el access token de Google.')
+    }
 }
 
-const calendar = google.calendar({ version: 'v3', auth: oAuth2Client })
+function ensureCalendarId(calendarId) {
+    if (!String(calendarId || '').trim()) {
+        throw new Error('Falta el calendarId.')
+    }
+}
 
-function ensureGoogleAuthConfigured() {
-    if (!GCAL_CLIENT_ID || !GCAL_CLIENT_SECRET || !GCAL_REDIRECT_URI || !GCAL_REFRESH_TOKEN) {
-        throw new Error(
-            'Faltan variables de entorno de Google Calendar. Revisa GCAL_CLIENT_ID, GCAL_CLIENT_SECRET, GCAL_REDIRECT_URI y GCAL_REFRESH_TOKEN.'
+function ensureValidTimeZone(timeZone) {
+    const safeTimeZone = String(timeZone || '').trim() || TIMEZONE
+
+    try {
+        new Intl.DateTimeFormat('en-US', { timeZone: safeTimeZone }).format(new Date())
+        return safeTimeZone
+    } catch (error) {
+        throw new Error(`Zona horaria inválida: ${safeTimeZone}`)
+    }
+}
+
+function createAuthorizedCalendarClient(accessToken) {
+    ensureAccessToken(accessToken)
+
+    const auth = new google.auth.OAuth2()
+    auth.setCredentials({
+        access_token: accessToken
+    })
+
+    return google.calendar({
+        version: 'v3',
+        auth
+    })
+}
+
+function pad(value) {
+    return String(value).padStart(2, '0')
+}
+
+function parseLocalDateTime(localDateTime) {
+    const match = String(localDateTime || '')
+        .trim()
+        .match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/)
+
+    if (!match) {
+        throw new Error(`Fecha local inválida: ${localDateTime}`)
+    }
+
+    const [, year, month, day, hour, minute] = match
+
+    return {
+        year: Number(year),
+        month: Number(month),
+        day: Number(day),
+        hour: Number(hour),
+        minute: Number(minute)
+    }
+}
+
+function getDatePartsInTimeZone(date, timeZone) {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23'
+    })
+
+    const parts = formatter.formatToParts(date)
+    const map = {}
+
+    for (const part of parts) {
+        if (part.type !== 'literal') {
+            map[part.type] = part.value
+        }
+    }
+
+    return {
+        year: Number(map.year),
+        month: Number(map.month),
+        day: Number(map.day),
+        hour: Number(map.hour),
+        minute: Number(map.minute),
+        second: Number(map.second)
+    }
+}
+
+function getOffsetMinutesForInstant(date, timeZone) {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        timeZoneName: 'shortOffset'
+    })
+
+    const timeZonePart = formatter
+        .formatToParts(date)
+        .find((part) => part.type === 'timeZoneName')
+
+    const raw = String(timeZonePart?.value || 'GMT').trim()
+
+    if (raw === 'GMT' || raw === 'UTC') {
+        return 0
+    }
+
+    const match = raw.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/i)
+
+    if (!match) {
+        throw new Error(`No se pudo interpretar el offset para ${timeZone}: ${raw}`)
+    }
+
+    const [, sign, hours, minutes = '00'] = match
+    const total = Number(hours) * 60 + Number(minutes)
+
+    return sign === '-' ? -total : total
+}
+
+function getUtcDateFromLocalDateTime(localDateTime, timeZone) {
+    const safeTimeZone = ensureValidTimeZone(timeZone)
+    const parts = parseLocalDateTime(localDateTime)
+
+    let utcMillis = Date.UTC(
+        parts.year,
+        parts.month - 1,
+        parts.day,
+        parts.hour,
+        parts.minute,
+        0,
+        0
+    )
+
+    for (let index = 0; index < 4; index += 1) {
+        const guessDate = new Date(utcMillis)
+        const zonedParts = getDatePartsInTimeZone(guessDate, safeTimeZone)
+
+        const desiredUtcMinutes = Math.round(
+            Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0, 0) /
+                60000
         )
+
+        const actualUtcMinutes = Math.round(
+            Date.UTC(
+                zonedParts.year,
+                zonedParts.month - 1,
+                zonedParts.day,
+                zonedParts.hour,
+                zonedParts.minute,
+                zonedParts.second || 0,
+                0
+            ) / 60000
+        )
+
+        const diffMinutes = desiredUtcMinutes - actualUtcMinutes
+
+        if (diffMinutes === 0) {
+            break
+        }
+
+        utcMillis += diffMinutes * 60000
+    }
+
+    return new Date(utcMillis)
+}
+
+function toGoogleDateTime(localDateTime, timeZone) {
+    const safeTimeZone = ensureValidTimeZone(timeZone)
+    const instant = getUtcDateFromLocalDateTime(localDateTime, safeTimeZone)
+    const offsetMinutes = getOffsetMinutesForInstant(instant, safeTimeZone)
+    const sign = offsetMinutes >= 0 ? '+' : '-'
+    const absolute = Math.abs(offsetMinutes)
+    const offsetHours = pad(Math.floor(absolute / 60))
+    const offsetRemainingMinutes = pad(absolute % 60)
+
+    const { year, month, day, hour, minute } = parseLocalDateTime(localDateTime)
+
+    return `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00${sign}${offsetHours}:${offsetRemainingMinutes}`
+}
+
+function convertAbsoluteDateTimeToLocalDateTime(value, timeZone) {
+    const safeTimeZone = ensureValidTimeZone(timeZone)
+    const date = new Date(value)
+
+    if (Number.isNaN(date.getTime())) {
+        return ''
+    }
+
+    const parts = getDatePartsInTimeZone(date, safeTimeZone)
+
+    return `${pad(parts.year)}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`
+}
+
+function getDurationMinutes(startDateTime, endDateTime) {
+    const start = parseLocalDateTime(startDateTime)
+    const end = parseLocalDateTime(endDateTime)
+
+    const startUtc = Date.UTC(
+        start.year,
+        start.month - 1,
+        start.day,
+        start.hour,
+        start.minute,
+        0,
+        0
+    )
+
+    const endUtc = Date.UTC(
+        end.year,
+        end.month - 1,
+        end.day,
+        end.hour,
+        end.minute,
+        0,
+        0
+    )
+
+    const diff = Math.round((endUtc - startUtc) / 60000)
+    return diff > 0 ? diff : 0
+}
+
+function normalizeDraftForGoogle(draft) {
+    if (!draft || typeof draft !== 'object') {
+        throw new Error('Draft inválido.')
+    }
+
+    const summary = String(draft.summary || '').trim()
+    const description = String(draft.description || '').trim()
+    const location = String(draft.location || '').trim()
+    const timeZone = ensureValidTimeZone(draft.timeZone || TIMEZONE)
+    const startDateTime = String(draft.startDateTime || '').trim()
+    const endDateTime = String(draft.endDateTime || '').trim()
+    const status = String(draft.status || 'CONFIRMED').trim()
+
+    if (!summary) {
+        throw new Error('El draft debe tener summary.')
+    }
+
+    if (!startDateTime) {
+        throw new Error('El draft debe tener startDateTime.')
+    }
+
+    if (!endDateTime) {
+        throw new Error('El draft debe tener endDateTime.')
+    }
+
+    const durationMinutes = getDurationMinutes(startDateTime, endDateTime)
+
+    if (durationMinutes <= 0) {
+        throw new Error('La fecha de fin debe ser posterior a la de inicio.')
+    }
+
+    return {
+        summary,
+        description,
+        location,
+        timeZone,
+        startDateTime,
+        endDateTime,
+        durationMinutes,
+        status
     }
 }
 
 function mapGoogleEventToAppEvent(item) {
+    const eventTimeZone =
+        item.start?.timeZone ||
+        item.end?.timeZone ||
+        TIMEZONE
+
     return {
         id: item.id,
         summary: item.summary || '',
@@ -459,10 +940,13 @@ function mapGoogleEventToAppEvent(item) {
         location: item.location || '',
         start: item.start || {},
         end: item.end || {},
-        timeZone:
-            item.start?.timeZone ||
-            item.end?.timeZone ||
-            TIMEZONE,
+        timeZone: eventTimeZone,
+        startDateTime: item.start?.dateTime
+            ? convertAbsoluteDateTimeToLocalDateTime(item.start.dateTime, eventTimeZone)
+            : '',
+        endDateTime: item.end?.dateTime
+            ? convertAbsoluteDateTimeToLocalDateTime(item.end.dateTime, eventTimeZone)
+            : '',
         status: item.status || 'confirmed',
         uid: item.iCalUID || '',
         categories: [],
@@ -472,91 +956,144 @@ function mapGoogleEventToAppEvent(item) {
 }
 
 function buildGoogleResourceFromDraft(draft) {
+    const normalized = normalizeDraftForGoogle(draft)
+
     return {
-        summary: draft.summary,
-        description: draft.description || '',
-        location: draft.location || '',
+        summary: normalized.summary,
+        description: normalized.description,
+        location: normalized.location,
         status:
-            String(draft.status || '').toUpperCase() === 'CANCELLED'
+            normalized.status.toUpperCase() === 'CANCELLED'
                 ? 'cancelled'
                 : 'confirmed',
         start: {
-            dateTime: draft.startDateTime,
-            timeZone: draft.timeZone || TIMEZONE
+            dateTime: toGoogleDateTime(normalized.startDateTime, normalized.timeZone),
+            timeZone: normalized.timeZone
         },
         end: {
-            dateTime: draft.endDateTime,
-            timeZone: draft.timeZone || TIMEZONE
+            dateTime: toGoogleDateTime(normalized.endDateTime, normalized.timeZone),
+            timeZone: normalized.timeZone
         }
     }
 }
 
-async function obtenerEventos() {
-    ensureGoogleAuthConfigured()
+function normalizeGoogleApiError(err) {
+    const status =
+        err?.code ||
+        err?.response?.status ||
+        500
 
-    const res = await calendar.events.list({
-        calendarId: CALENDAR_ID,
-        timeMin: new Date().toISOString(),
-        maxResults: 50,
-        singleEvents: true,
-        orderBy: 'startTime',
-        fields:
-            'items(id,summary,description,location,status,iCalUID,start,end),nextPageToken'
-    })
+    const message =
+        err?.errors?.[0]?.message ||
+        err?.response?.data?.error?.message ||
+        err?.message ||
+        'Error desconocido con Google Calendar.'
 
-    return (res.data.items || []).map(mapGoogleEventToAppEvent)
+    const wrapped = new Error(message)
+    wrapped.statusCode = status
+
+    return wrapped
 }
 
-async function crearEventoDesdeDraft(draft) {
-    ensureGoogleAuthConfigured()
+async function obtenerEventos({ accessToken, calendarId }) {
+    try {
+        ensureAccessToken(accessToken)
+        ensureCalendarId(calendarId)
 
-    const resource = buildGoogleResourceFromDraft(draft)
+        const calendar = createAuthorizedCalendarClient(accessToken)
 
-    const res = await calendar.events.insert({
-        calendarId: CALENDAR_ID,
-        resource
-    })
+        const res = await calendar.events.list({
+            calendarId,
+            timeMin: new Date().toISOString(),
+            maxResults: 50,
+            singleEvents: true,
+            orderBy: 'startTime',
+            fields:
+                'items(id,summary,description,location,status,iCalUID,start,end),nextPageToken'
+        })
 
-    return mapGoogleEventToAppEvent(res.data)
+        return (res.data.items || []).map(mapGoogleEventToAppEvent)
+    } catch (err) {
+        throw normalizeGoogleApiError(err)
+    }
 }
 
-async function actualizarEventoDesdeDraft(id, draft) {
-    ensureGoogleAuthConfigured()
+async function crearEventoDesdeDraft({ accessToken, calendarId, draft }) {
+    try {
+        ensureAccessToken(accessToken)
+        ensureCalendarId(calendarId)
 
-    const resource = buildGoogleResourceFromDraft(draft)
+        const calendar = createAuthorizedCalendarClient(accessToken)
+        const resource = buildGoogleResourceFromDraft(draft)
 
-    const res = await calendar.events.update({
-        calendarId: CALENDAR_ID,
-        eventId: id,
-        resource
-    })
+        const res = await calendar.events.insert({
+            calendarId,
+            resource
+        })
 
-    return mapGoogleEventToAppEvent(res.data)
+        return mapGoogleEventToAppEvent(res.data)
+    } catch (err) {
+        throw normalizeGoogleApiError(err)
+    }
 }
 
-async function eliminarEvento(id) {
-    ensureGoogleAuthConfigured()
+async function actualizarEventoDesdeDraft({ accessToken, calendarId, id, draft }) {
+    try {
+        ensureAccessToken(accessToken)
+        ensureCalendarId(calendarId)
 
-    await calendar.events.delete({
-        calendarId: CALENDAR_ID,
-        eventId: id
-    })
+        const calendar = createAuthorizedCalendarClient(accessToken)
+        const resource = buildGoogleResourceFromDraft(draft)
+
+        const res = await calendar.events.update({
+            calendarId,
+            eventId: id,
+            resource
+        })
+
+        return mapGoogleEventToAppEvent(res.data)
+    } catch (err) {
+        throw normalizeGoogleApiError(err)
+    }
 }
 
-async function obtenerTodosLosEventos({ maxResults = 250 } = {}) {
-    ensureGoogleAuthConfigured()
+async function eliminarEvento({ accessToken, calendarId, id }) {
+    try {
+        ensureAccessToken(accessToken)
+        ensureCalendarId(calendarId)
 
-    const res = await calendar.events.list({
-        calendarId: CALENDAR_ID,
-        timeMin: new Date('2000-01-01T00:00:00.000Z').toISOString(),
-        maxResults,
-        singleEvents: true,
-        orderBy: 'startTime',
-        fields:
-            'items(id,summary,description,location,status,iCalUID,start,end),nextPageToken'
-    })
+        const calendar = createAuthorizedCalendarClient(accessToken)
 
-    return (res.data.items || []).map(mapGoogleEventToAppEvent)
+        await calendar.events.delete({
+            calendarId,
+            eventId: id
+        })
+    } catch (err) {
+        throw normalizeGoogleApiError(err)
+    }
+}
+
+async function obtenerTodosLosEventos({ accessToken, calendarId, maxResults = 250 }) {
+    try {
+        ensureAccessToken(accessToken)
+        ensureCalendarId(calendarId)
+
+        const calendar = createAuthorizedCalendarClient(accessToken)
+
+        const res = await calendar.events.list({
+            calendarId,
+            timeMin: new Date('2000-01-01T00:00:00.000Z').toISOString(),
+            maxResults,
+            singleEvents: true,
+            orderBy: 'startTime',
+            fields:
+                'items(id,summary,description,location,status,iCalUID,start,end),nextPageToken'
+        })
+
+        return (res.data.items || []).map(mapGoogleEventToAppEvent)
+    } catch (err) {
+        throw normalizeGoogleApiError(err)
+    }
 }
 
 module.exports = {
@@ -571,12 +1108,13 @@ const {
     obtenerEventos,
     crearEventoDesdeDraft
 } = require('./googleCalendarService.cjs')
+const { parseIcsToDraft } = require('../lib/ics/parseIcsToDraft.cjs')
 
 function jsonHeaders() {
     return {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Calendar-Id',
         'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
     }
 }
@@ -591,18 +1129,51 @@ function parseBody(body) {
     }
 }
 
-function validateDraftPayload(payload) {
+function validateCreatePayload(payload) {
     if (!payload || typeof payload !== 'object') {
         throw new Error('Payload inválido.')
-    }
-
-    if (!payload.draft || typeof payload.draft !== 'object') {
-        throw new Error('Falta el draft.')
     }
 
     if (!String(payload.icsContent || '').trim()) {
         throw new Error('Falta el contenido ICS.')
     }
+}
+
+function extractAccessToken(event) {
+    const authorization =
+        event?.headers?.authorization ||
+        event?.headers?.Authorization ||
+        ''
+
+    const match = String(authorization).match(/^Bearer\s+(.+)$/i)
+    return match ? match[1].trim() : ''
+}
+
+function extractCalendarId(event) {
+    return String(
+        event?.headers?.['x-calendar-id'] ||
+            event?.headers?.['X-Calendar-Id'] ||
+            ''
+    ).trim()
+}
+
+function getRequestContext(event) {
+    const accessToken = extractAccessToken(event)
+    const calendarId = extractCalendarId(event)
+
+    if (!accessToken) {
+        const error = new Error('Falta Authorization Bearer token.')
+        error.statusCode = 401
+        throw error
+    }
+
+    if (!calendarId) {
+        const error = new Error('Falta el header X-Calendar-Id.')
+        error.statusCode = 400
+        throw error
+    }
+
+    return { accessToken, calendarId }
 }
 
 exports.handler = async function (event) {
@@ -618,7 +1189,9 @@ exports.handler = async function (event) {
 
     if (event.httpMethod === 'GET') {
         try {
-            const items = await obtenerEventos()
+            const ctx = getRequestContext(event)
+            const items = await obtenerEventos(ctx)
+
             return {
                 statusCode: 200,
                 headers,
@@ -627,7 +1200,7 @@ exports.handler = async function (event) {
         } catch (err) {
             console.error(err)
             return {
-                statusCode: 500,
+                statusCode: err.statusCode || 500,
                 headers,
                 body: JSON.stringify({
                     error: err.message || 'Error al listar eventos'
@@ -638,10 +1211,18 @@ exports.handler = async function (event) {
 
     if (event.httpMethod === 'POST') {
         try {
+            const ctx = getRequestContext(event)
             const payload = parseBody(event.body)
-            validateDraftPayload(payload)
+            validateCreatePayload(payload)
 
-            const nuevo = await crearEventoDesdeDraft(payload.draft)
+            const draft = parseIcsToDraft(payload.icsContent, {
+                fallbackTimeZone: 'Europe/Dublin'
+            })
+
+            const nuevo = await crearEventoDesdeDraft({
+                ...ctx,
+                draft
+            })
 
             return {
                 statusCode: 201,
@@ -651,7 +1232,7 @@ exports.handler = async function (event) {
         } catch (err) {
             console.error(err)
             return {
-                statusCode: 400,
+                statusCode: err.statusCode || 400,
                 headers,
                 body: JSON.stringify({
                     error: err.message || 'Error al crear evento'
@@ -668,12 +1249,13 @@ exports.handler = async function (event) {
 }// functions/ics/import.cjs
 
 const { crearEventoDesdeDraft } = require('../eventos/googleCalendarService.cjs')
+const { parseIcsToDraft } = require('../lib/ics/parseIcsToDraft.cjs')
 
 function jsonHeaders() {
     return {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Calendar-Id',
         'Access-Control-Allow-Methods': 'POST,OPTIONS'
     }
 }
@@ -688,81 +1270,41 @@ function parseBody(body) {
     }
 }
 
-function getMatch(content, regex) {
-    const match = content.match(regex)
+function extractAccessToken(event) {
+    const authorization =
+        event?.headers?.authorization ||
+        event?.headers?.Authorization ||
+        ''
+
+    const match = String(authorization).match(/^Bearer\s+(.+)$/i)
     return match ? match[1].trim() : ''
 }
 
-function unescapeIcsText(value) {
-    return String(value || '')
-        .replace(/\\n/g, '\n')
-        .replace(/\\,/g, ',')
-        .replace(/\\;/g, ';')
-        .replace(/\\\\/g, '\\')
+function extractCalendarId(event) {
+    return String(
+        event?.headers?.['x-calendar-id'] ||
+            event?.headers?.['X-Calendar-Id'] ||
+            ''
+    ).trim()
 }
 
-function parseIcsToDraft(icsContent) {
-    const content = String(icsContent || '')
+function getRequestContext(event) {
+    const accessToken = extractAccessToken(event)
+    const calendarId = extractCalendarId(event)
 
-    if (!content.includes('BEGIN:VCALENDAR') || !content.includes('BEGIN:VEVENT')) {
-        throw new Error('El contenido ICS no contiene un VEVENT válido.')
+    if (!accessToken) {
+        const error = new Error('Falta Authorization Bearer token.')
+        error.statusCode = 401
+        throw error
     }
 
-    const summary = unescapeIcsText(getMatch(content, /SUMMARY:(.+)/))
-    const location = unescapeIcsText(getMatch(content, /LOCATION:(.+)/))
-    const description = unescapeIcsText(getMatch(content, /DESCRIPTION:(.+)/))
-    const uid = unescapeIcsText(getMatch(content, /UID:(.+)/))
-    const status = unescapeIcsText(getMatch(content, /STATUS:(.+)/)) || 'CONFIRMED'
-
-    const dtStartMatch = content.match(/DTSTART(?:;TZID=([^:]+))?:(.+)/)
-    const dtEndMatch = content.match(/DTEND(?:;TZID=([^:]+))?:(.+)/)
-
-    if (!dtStartMatch || !dtEndMatch) {
-        throw new Error('El contenido ICS debe incluir DTSTART y DTEND.')
+    if (!calendarId) {
+        const error = new Error('Falta el header X-Calendar-Id.')
+        error.statusCode = 400
+        throw error
     }
 
-    const timeZone =
-        (dtStartMatch[1] || dtEndMatch[1] || 'Europe/Dublin').trim()
-
-    const startDateTime = normalizeIcsDateTime(dtStartMatch[2])
-    const endDateTime = normalizeIcsDateTime(dtEndMatch[2])
-
-    const start = new Date(startDateTime)
-    const end = new Date(endDateTime)
-    const durationMinutes = Math.max(
-        1,
-        Math.round((end.getTime() - start.getTime()) / 60000)
-    )
-
-    return {
-        summary,
-        description,
-        location,
-        startDateTime,
-        endDateTime,
-        durationMinutes,
-        timeZone,
-        uid,
-        status,
-        productId: '-//Santiago Haspert Piaggio//Calendar ICS//EN',
-        categories: [],
-        notes: ''
-    }
-}
-
-function normalizeIcsDateTime(value) {
-    const clean = String(value || '').trim().replace(/Z$/, '')
-
-    const match = clean.match(
-        /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/
-    )
-
-    if (!match) {
-        throw new Error(`No se pudo interpretar la fecha ICS: ${value}`)
-    }
-
-    const [, year, month, day, hours, minutes] = match
-    return `${year}-${month}-${day}T${hours}:${minutes}`
+    return { accessToken, calendarId }
 }
 
 exports.handler = async function (event) {
@@ -785,6 +1327,7 @@ exports.handler = async function (event) {
     }
 
     try {
+        const ctx = getRequestContext(event)
         const body = parseBody(event.body)
         const icsContent = String(body?.icsContent || '').trim()
 
@@ -792,8 +1335,14 @@ exports.handler = async function (event) {
             throw new Error('Debes enviar contenido ICS.')
         }
 
-        const draft = parseIcsToDraft(icsContent)
-        const created = await crearEventoDesdeDraft(draft)
+        const draft = parseIcsToDraft(icsContent, {
+            fallbackTimeZone: 'Europe/Dublin'
+        })
+
+        const created = await crearEventoDesdeDraft({
+            ...ctx,
+            draft
+        })
 
         return {
             statusCode: 200,
@@ -807,7 +1356,7 @@ exports.handler = async function (event) {
     } catch (err) {
         console.error(err)
         return {
-            statusCode: 400,
+            statusCode: err.statusCode || 400,
             headers,
             body: JSON.stringify({
                 error: err.message || 'No se pudo importar el archivo ICS.'
@@ -823,8 +1372,46 @@ function icsHeaders() {
         'Content-Type': 'text/calendar; charset=utf-8',
         'Content-Disposition': 'attachment; filename="calendario.ics"',
         'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Authorization,X-Calendar-Id',
         'Access-Control-Allow-Methods': 'GET,OPTIONS'
     }
+}
+
+function extractAccessToken(event) {
+    const authorization =
+        event?.headers?.authorization ||
+        event?.headers?.Authorization ||
+        ''
+
+    const match = String(authorization).match(/^Bearer\s+(.+)$/i)
+    return match ? match[1].trim() : ''
+}
+
+function extractCalendarId(event) {
+    return String(
+        event?.headers?.['x-calendar-id'] ||
+            event?.headers?.['X-Calendar-Id'] ||
+            ''
+    ).trim()
+}
+
+function getRequestContext(event) {
+    const accessToken = extractAccessToken(event)
+    const calendarId = extractCalendarId(event)
+
+    if (!accessToken) {
+        const error = new Error('Falta Authorization Bearer token.')
+        error.statusCode = 401
+        throw error
+    }
+
+    if (!calendarId) {
+        const error = new Error('Falta el header X-Calendar-Id.')
+        error.statusCode = 400
+        throw error
+    }
+
+    return { accessToken, calendarId }
 }
 
 function pad(value) {
@@ -914,7 +1501,8 @@ exports.handler = async function (event) {
     }
 
     try {
-        const eventos = await obtenerTodosLosEventos()
+        const ctx = getRequestContext(event)
+        const eventos = await obtenerTodosLosEventos(ctx)
 
         const body = [
             'BEGIN:VCALENDAR',
@@ -935,7 +1523,7 @@ exports.handler = async function (event) {
     } catch (err) {
         console.error(err)
         return {
-            statusCode: 500,
+            statusCode: err.statusCode || 500,
             headers: {
                 ...headers,
                 'Content-Type': 'application/json'
@@ -947,37 +1535,12 @@ exports.handler = async function (event) {
     }
 }// functions/oauth2-initiateAuth.cjs
 
-const { google } = require('googleapis')
-
-const {
-    GCAL_CLIENT_ID,
-    GCAL_CLIENT_SECRET,
-    GCAL_REDIRECT_URI
-} = process.env
-
 exports.handler = async function () {
-    if (!GCAL_CLIENT_ID || !GCAL_CLIENT_SECRET || !GCAL_REDIRECT_URI) {
-        return {
-            statusCode: 500,
-            body: 'Faltan variables de entorno OAuth de Google Calendar.'
-        }
-    }
-
-    const oAuth2Client = new google.auth.OAuth2(
-        GCAL_CLIENT_ID,
-        GCAL_CLIENT_SECRET,
-        GCAL_REDIRECT_URI
-    )
-
-    const authUrl = oAuth2Client.generateAuthUrl({
-        access_type: 'offline',
-        prompt: 'consent',
-        scope: ['https://www.googleapis.com/auth/calendar']
-    })
-
     return {
-        statusCode: 302,
-        headers: { Location: authUrl },
-        body: ''
+        statusCode: 410,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            error: 'Endpoint deprecado. La app ahora usa Google Identity Services en frontend para asignar calendario.'
+        })
     }
 }

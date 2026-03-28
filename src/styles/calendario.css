@@ -141,6 +141,61 @@
     min-width: 140px;
 }
 
+.calendar-pagination {
+    margin-top: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.85rem;
+    flex-wrap: wrap;
+}
+
+.calendar-pagination-pages {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.calendar-pagination-button {
+    min-width: 42px;
+    min-height: 42px;
+    padding: 0.65rem 0.9rem;
+    border-radius: 10px;
+    border: 1px solid #d7deea;
+    background: #fff;
+    color: #172033;
+    font-weight: 600;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.calendar-pagination-button:hover:not(:disabled) {
+    background: #f8fafc;
+    border-color: #b7c3d8;
+}
+
+.calendar-pagination-button-active,
+.calendar-pagination-button-active:hover:not(:disabled) {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+}
+
+.calendar-pagination-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.calendar-pagination-ellipsis {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    color: #7b8798;
+    font-weight: 700;
+}
+
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -260,5 +315,9 @@
         min-width: auto;
         flex-direction: row;
         flex-wrap: wrap;
+    }
+
+    .calendar-pagination {
+        flex-direction: column;
     }
 }

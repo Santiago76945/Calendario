@@ -4,6 +4,7 @@ const {
     obtenerEventos,
     crearEventoDesdeDraft
 } = require('./googleCalendarService.cjs')
+const { parseIcsToDraft } = require('../lib/ics/parseIcsToDraft.cjs')
 
 function jsonHeaders() {
     return {
@@ -24,13 +25,9 @@ function parseBody(body) {
     }
 }
 
-function validateDraftPayload(payload) {
+function validateCreatePayload(payload) {
     if (!payload || typeof payload !== 'object') {
         throw new Error('Payload inválido.')
-    }
-
-    if (!payload.draft || typeof payload.draft !== 'object') {
-        throw new Error('Falta el draft.')
     }
 
     if (!String(payload.icsContent || '').trim()) {
@@ -75,6 +72,20 @@ function getRequestContext(event) {
     return { accessToken, calendarId }
 }
 
+function getQueryParam(event, key) {
+    return String(event?.queryStringParameters?.[key] || '').trim()
+}
+
+function parsePageSize(rawValue) {
+    const parsed = Number(rawValue)
+
+    if (!Number.isFinite(parsed)) {
+        return 10
+    }
+
+    return Math.max(1, Math.min(25, Math.trunc(parsed)))
+}
+
 exports.handler = async function (event) {
     const headers = jsonHeaders()
 
@@ -89,12 +100,23 @@ exports.handler = async function (event) {
     if (event.httpMethod === 'GET') {
         try {
             const ctx = getRequestContext(event)
-            const items = await obtenerEventos(ctx)
+            const pageToken = getQueryParam(event, 'pageToken')
+            const pageSize = parsePageSize(getQueryParam(event, 'pageSize'))
+
+            const result = await obtenerEventos({
+                ...ctx,
+                pageToken,
+                pageSize
+            })
 
             return {
                 statusCode: 200,
                 headers,
-                body: JSON.stringify(items)
+                body: JSON.stringify({
+                    items: Array.isArray(result?.items) ? result.items : [],
+                    nextPageToken: String(result?.nextPageToken || ''),
+                    pageSize
+                })
             }
         } catch (err) {
             console.error(err)
@@ -112,11 +134,15 @@ exports.handler = async function (event) {
         try {
             const ctx = getRequestContext(event)
             const payload = parseBody(event.body)
-            validateDraftPayload(payload)
+            validateCreatePayload(payload)
+
+            const draft = parseIcsToDraft(payload.icsContent, {
+                fallbackTimeZone: 'Europe/Dublin'
+            })
 
             const nuevo = await crearEventoDesdeDraft({
                 ...ctx,
-                draft: payload.draft
+                draft
             })
 
             return {
