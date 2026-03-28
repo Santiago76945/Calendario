@@ -1,0 +1,132 @@
+/* src/styles/importexport.css */
+
+.importexport-container {
+    width: min(1100px, calc(100% - 2rem));
+    margin: 0 auto;
+    min-height: 100vh;
+    padding: 2rem 0 3rem;
+}
+
+.importexport-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.importexport-title {
+    margin: 0;
+    font-size: 2rem;
+    color: #172033;
+}
+
+.importexport-subtitle {
+    margin: 0.35rem 0 0;
+    color: #5b6472;
+    line-height: 1.6;
+}
+
+.importexport-panel {
+    background: #fff;
+    border: 1px solid #d7deea;
+    border-radius: 18px;
+    padding: 1.5rem;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.importexport-label {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+    color: #172033;
+}
+
+.importexport-textarea {
+    width: 100%;
+    min-height: 380px;
+    resize: vertical;
+    border: 1px solid #d7deea;
+    border-radius: 12px;
+    padding: 1rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: #172033;
+    background: #fbfcfe;
+}
+
+.importexport-actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.importexport-button,
+.importexport-secondary-button {
+    min-height: 42px;
+    padding: 0.7rem 1rem;
+    border-radius: 10px;
+    font-weight: 600;
+    border: 1px solid transparent;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.importexport-button {
+    background: #2563eb;
+    color: #fff;
+}
+
+.importexport-button:hover {
+    background: #1d4ed8;
+}
+
+.importexport-secondary-button {
+    background: #fff;
+    color: #172033;
+    border-color: #d7deea;
+}
+
+.importexport-secondary-button:hover {
+    background: #f8fafc;
+}
+
+.importexport-validation {
+    margin-top: 1rem;
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+    border: 1px solid transparent;
+    font-weight: 500;
+}
+
+.importexport-validation-ok {
+    background: #ecfdf5;
+    color: #166534;
+    border-color: #bbf7d0;
+}
+
+.importexport-validation-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border-color: #fecaca;
+}
+
+.importexport-result {
+    margin-top: 1rem;
+    background: #f8fafc;
+    border: 1px solid #d7deea;
+    border-radius: 12px;
+    padding: 1rem;
+    color: #334155;
+}
+
+@media (max-width: 768px) {
+    .importexport-header {
+        flex-direction: column;
+    }
+
+    .importexport-textarea {
+        min-height: 300px;
+    }
+}

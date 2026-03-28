@@ -1,0 +1,4435 @@
+// src/constants/storageKeys.js
+
+export const STORAGE_KEYS = {
+    AUTH_OK: 'calendar_ics_auth_ok',
+    TIMEZONE_PREFERENCE: 'calendar_ics_timezone_preference',
+    AI_DRAFT_TIMEZONE: 'calendar_ics_ai_draft_timezone'
+}// src/constants/timezones.js
+
+export const POPULAR_TIMEZONES = [
+    { value: 'Europe/Dublin', label: 'Dublín (Europe/Dublin)' },
+    { value: 'Europe/London', label: 'Londres (Europe/London)' },
+    { value: 'Europe/Madrid', label: 'Madrid (Europe/Madrid)' },
+    { value: 'Europe/Berlin', label: 'Berlín (Europe/Berlin)' },
+    { value: 'Europe/Rome', label: 'Roma (Europe/Rome)' },
+    { value: 'Europe/Paris', label: 'París (Europe/Paris)' },
+    { value: 'America/Argentina/Buenos_Aires', label: 'Buenos Aires (America/Argentina/Buenos_Aires)' },
+    { value: 'America/Sao_Paulo', label: 'São Paulo (America/Sao_Paulo)' },
+    { value: 'America/New_York', label: 'New York (America/New_York)' },
+    { value: 'America/Mexico_City', label: 'Ciudad de México (America/Mexico_City)' }
+]
+
+export const DEFAULT_TIMEZONE = 'Europe/Dublin'
+export const MANUAL_TIMEZONE_OPTION = '__manual__'// src/utils/dateTime.js
+
+function pad(value) {
+    return String(value).padStart(2, '0')
+}
+
+export function formatDateForInput(date = new Date()) {
+    const year = date.getFullYear()
+    const month = pad(date.getMonth() + 1)
+    const day = pad(date.getDate())
+
+    return `${year}-${month}-${day}`
+}
+
+export function formatTimeForInput(date = new Date()) {
+    const hours = pad(date.getHours())
+    const minutes = pad(date.getMinutes())
+
+    return `${hours}:${minutes}`
+}
+
+export function combineDateAndTime(dateValue, timeValue) {
+    if (!dateValue || !timeValue) {
+        return ''
+    }
+
+    return `${dateValue}T${timeValue}`
+}
+
+export function addMinutesToLocalDateTime(localDateTime, minutesToAdd) {
+    const date = new Date(localDateTime)
+
+    if (Number.isNaN(date.getTime())) {
+        return ''
+    }
+
+    date.setMinutes(date.getMinutes() + Number(minutesToAdd || 0))
+
+    return toLocalDateTimeString(date)
+}
+
+export function toLocalDateTimeString(date) {
+    const year = date.getFullYear()
+    const month = pad(date.getMonth() + 1)
+    const day = pad(date.getDate())
+    const hours = pad(date.getHours())
+    const minutes = pad(date.getMinutes())
+
+    return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+export function formatIcsDateTimeLocal(localDateTime) {
+    const date = new Date(localDateTime)
+
+    if (Number.isNaN(date.getTime())) {
+        throw new Error('Fecha inválida para ICS.')
+    }
+
+    const year = date.getFullYear()
+    const month = pad(date.getMonth() + 1)
+    const day = pad(date.getDate())
+    const hours = pad(date.getHours())
+    const minutes = pad(date.getMinutes())
+    const seconds = pad(date.getSeconds())
+
+    return `${year}${month}${day}T${hours}${minutes}${seconds}`
+}
+
+export function formatIcsUtcStamp(date = new Date()) {
+    const year = date.getUTCFullYear()
+    const month = pad(date.getUTCMonth() + 1)
+    const day = pad(date.getUTCDate())
+    const hours = pad(date.getUTCHours())
+    const minutes = pad(date.getUTCMinutes())
+    const seconds = pad(date.getUTCSeconds())
+
+    return `${year}${month}${day}T${hours}${minutes}${seconds}Z`
+}
+
+export function tryFormatHumanDateTime(value, locale = undefined) {
+    if (!value) return '-'
+
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+        return value
+    }
+
+    return date.toLocaleString(locale)
+}// src/utils/icsText.js
+
+export function escapeIcsText(value) {
+    if (value == null) return ''
+
+    return String(value)
+        .replace(/\\/g, '\\\\')
+        .replace(/\r\n/g, '\n')
+        .replace(/\n/g, '\\n')
+        .replace(/,/g, '\\,')
+        .replace(/;/g, '\\;')
+}
+
+export function sanitizeUidPart(value) {
+    if (!value) return 'event'
+
+    return String(value)
+        .trim()
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[^\w\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/_+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '') || 'event'
+}
+
+export function foldIcsLine(line, limit = 75) {
+    if (typeof line !== 'string' || line.length <= limit) {
+        return line
+    }
+
+    const chunks = []
+    let index = 0
+
+    while (index < line.length) {
+        const part = line.slice(index, index + limit)
+        chunks.push(index === 0 ? part : ` ${part}`)
+        index += limit
+    }
+
+    return chunks.join('\r\n')
+}
+
+export function buildIcsLines(lines) {
+    return lines
+        .filter((line) => typeof line === 'string' && line.length > 0)
+        .map((line) => foldIcsLine(line))
+        .join('\r\n')
+}/* src/index.css */
+
+:root {
+    color-scheme: light;
+    --bg: #f5f7fb;
+    --surface: #ffffff;
+    --surface-soft: #f8fafc;
+    --border: #d7deea;
+    --border-strong: #b7c3d8;
+    --text: #1f2937;
+    --text-soft: #5b6472;
+    --text-muted: #7b8798;
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --secondary-bg: #eef2ff;
+    --danger: #dc2626;
+    --danger-hover: #b91c1c;
+    --success-bg: #ecfdf5;
+    --success-text: #166534;
+    --error-bg: #fef2f2;
+    --error-text: #991b1b;
+    --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    --radius: 14px;
+    --radius-sm: 10px;
+    --max-width: 1120px;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+    min-height: 100%;
+    margin: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+button {
+    cursor: pointer;
+}
+
+img {
+    max-width: 100%;
+    display: block;
+}
+
+.button-primary,
+.button-secondary,
+.button-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0.65rem 1rem;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+    font-weight: 600;
+}
+
+.button-primary {
+    background: var(--primary);
+    color: #fff;
+}
+
+.button-primary:hover {
+    background: var(--primary-hover);
+}
+
+.button-secondary {
+    background: #fff;
+    color: var(--text);
+    border-color: var(--border);
+}
+
+.button-secondary:hover {
+    background: var(--surface-soft);
+}
+
+.button-danger {
+    background: var(--danger);
+    color: #fff;
+}
+
+.button-danger:hover {
+    background: var(--danger-hover);
+}
+
+button:disabled,
+.button-primary:disabled,
+.button-secondary:disabled,
+.button-danger:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+input,
+select,
+textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.75rem 0.9rem;
+    background: #fff;
+    color: var(--text);
+}
+
+textarea {
+    resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus {
+    outline: 2px solid rgba(37, 99, 235, 0.18);
+    outline-offset: 1px;
+    border-color: var(--primary);
+}
+
+label {
+    display: block;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.4rem;
+}
+
+.page-shell {
+    width: min(var(--max-width), calc(100% - 2rem));
+    margin: 0 auto;
+}
+
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.section-title {
+    margin: 0;
+    font-size: 1.75rem;
+}
+
+.section-subtitle {
+    margin: 0.35rem 0 0;
+    color: var(--text-soft);
+}
+
+.error-text {
+    color: var(--error-text);
+    background: var(--error-bg);
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    margin-top: 1rem;
+}
+
+.success-text {
+    color: var(--success-text);
+    background: var(--success-bg);
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    margin-top: 1rem;
+}# Auth Behaviour and Calendar Assignment
+
+## Purpose
+
+This document explains two related concerns in the app:
+
+1. how access to the app itself is protected
+2. how the backend functions authenticate against Google Calendar and decide which calendar they operate on
+
+These are separate layers and should not be confused.
+
+- **App auth** controls whether a user can open the frontend
+- **Google Calendar auth** controls whether Netlify Functions can read and write calendar data
+- **Calendar assignment** controls which Google Calendar those functions target
+
+---
+
+## High-level model
+
+The app currently uses two different authentication concepts.
+
+### 1. Frontend access gate
+
+This is the lightweight access barrier for the app UI.
+
+It uses:
+
+- `VITE_AUTH_CODE`
+- `src/components/AuthGate.jsx`
+- `src/services/authService.js`
+- `src/constants/storageKeys.js`
+
+Its purpose is to prevent casual access to the frontend.
+
+### 2. Google Calendar server authentication
+
+This is the backend authentication used by Netlify Functions when they call the Google Calendar API.
+
+It uses:
+
+- `GCAL_CLIENT_ID`
+- `GCAL_CLIENT_SECRET`
+- `GCAL_REDIRECT_URI`
+- `GCAL_REFRESH_TOKEN`
+- `functions/oauth2-initiateAuth.cjs`
+- `functions/oauth2-callback.cjs`
+- `functions/eventos/googleCalendarService.cjs`
+
+Its purpose is to allow the server-side functions to operate on the selected Google Calendar.
+
+These two auth layers are independent.
+
+A user may successfully open the frontend and still fail to list or create events if Google Calendar server auth is not configured correctly.
+
+---
+
+## Environment variables involved
+
+Example context:
+
+```env
+# Google Calendar API
+# Cuenta de Google utilizada: estudioVGH@yahoo.com
+GCAL_CLIENT_ID=81360..
+GCAL_CLIENT_SECRET=GOCSPX...
+GCAL_REDIRECT_URI=https://calendario-by-tk.netlify.app/.netlify/functions/oauth2-callback
+CALENDAR_ID=estudiovgh@yahoo.com
+TIMEZONE=America/Argentina/Cordoba
+
+# ❗ Sólo el dominio base de la app (local o prod)
+# En producción pon https://tu-dominio.com
+# En desarrollo, Netlify Dev no expone URL en process.env.URL
+# así que usaremos un fallback:
+SITE_URL=https://calendario-by-tk.netlify.app
+
+# Código de acceso restringido
+VITE_AUTH_CODE=miC....
+
+# OpenAI (solo servidor)
+OPENAI_API_KEY=sk-pr...
+````
+
+There is one additional variable required by the current backend flow:
+
+```env
+GCAL_REFRESH_TOKEN=...
+```
+
+Without `GCAL_REFRESH_TOKEN`, the Netlify Functions cannot authenticate to Google Calendar even if the client ID and secret are present.
+
+---
+
+## App access auth behaviour
+
+## Purpose
+
+The app uses a lightweight frontend auth gate to block access to the UI unless the correct access code is entered.
+
+This is intended as a simple front-door protection layer for personal or limited-distribution use.
+
+It is not a full user account system.
+
+---
+
+## Configuration source
+
+The frontend access gate uses:
+
+`VITE_AUTH_CODE`
+
+This value is exposed to the frontend build and is treated as the expected code.
+
+### Behaviour when configured
+
+If `VITE_AUTH_CODE` exists and is not empty:
+
+* the auth gate is active
+* the user must enter the correct code before the app is shown
+
+### Behaviour when not configured
+
+If `VITE_AUTH_CODE` is empty or missing:
+
+* the auth gate is considered disabled
+* the app opens directly
+
+---
+
+## Initial app load behaviour
+
+When the app loads, the auth gate checks:
+
+1. whether auth is required
+2. whether the browser already has a persisted authenticated marker
+
+### If auth is not required
+
+The user is allowed into the app immediately.
+
+### If auth is required and the user is already authenticated
+
+The user is allowed into the app immediately.
+
+### If auth is required and the user is not authenticated
+
+The auth screen is shown instead of the application routes.
+
+---
+
+## Persisted authentication behaviour
+
+Once the user enters the correct code:
+
+* the app stores an authenticated marker in local storage
+* the user is considered authenticated for future visits in the same browser
+
+This means the user should not be forced to re-enter the code every time they reopen the app.
+
+### Scope note
+
+This persistence is browser-local, not account-based.
+
+It only applies to:
+
+* the current browser
+* the current local storage context
+
+If local storage is cleared, or a different browser or device is used, the user must enter the code again.
+
+---
+
+## Auth screen behaviour
+
+When the gate is active and the user is not yet authenticated, the UI shows:
+
+* a simple access form
+* one input for the code
+* a submit button
+* an error message if the code is wrong
+
+The app remains inaccessible until the code is validated.
+
+---
+
+## Validation behaviour
+
+When the user submits the code:
+
+### If the code matches `VITE_AUTH_CODE`
+
+The app:
+
+1. persists authenticated state in local storage
+2. switches to allowed state
+3. renders the application normally
+
+### If the code does not match
+
+The app:
+
+* keeps the user on the auth screen
+* shows an error message such as `Código incorrecto.`
+* does not persist authentication
+
+---
+
+## Relationship with routing
+
+The auth gate wraps the application router.
+
+This means route-level access is blocked globally.
+
+If the user is not authenticated, they should not be able to access:
+
+* home
+* calendar page
+* import/export page
+
+The auth gate prevents all of them because it sits above routing and only renders children once access is granted.
+
+---
+
+## Error handling expectations for app auth
+
+The auth gate should degrade gracefully if local storage is unavailable.
+
+### Examples
+
+If reading local storage fails:
+
+* assume unauthenticated if auth is required
+
+If writing local storage fails:
+
+* the current session may still proceed after successful validation
+* but persistence may not survive reloads
+
+Errors may be logged for debugging, but user-facing behaviour should stay simple.
+
+---
+
+## Security expectations for app auth
+
+This frontend auth gate is a lightweight access barrier, not a full security system.
+
+It helps prevent casual or unintended access, but it does not replace:
+
+* proper backend authentication
+* user accounts
+* session management
+* server-side authorization
+
+Because the expected code is delivered through frontend configuration, it should be treated as a convenience mechanism rather than high-security protection.
+
+---
+
+## Google Calendar auth behaviour
+
+## Purpose
+
+The backend functions must authenticate with Google Calendar before they can:
+
+* list events
+* create events
+* update events
+* delete events
+* export the calendar
+* import ICS content into the calendar
+
+This authentication is handled server-side through OAuth credentials and a refresh token.
+
+The browser should not directly own or use the Google Calendar credentials.
+
+---
+
+## Variables involved
+
+The backend Google Calendar layer uses:
+
+* `GCAL_CLIENT_ID`
+* `GCAL_CLIENT_SECRET`
+* `GCAL_REDIRECT_URI`
+* `GCAL_REFRESH_TOKEN`
+* `CALENDAR_ID`
+* `TIMEZONE`
+
+These variables are consumed mainly by:
+
+* `functions/oauth2-initiateAuth.cjs`
+* `functions/oauth2-callback.cjs`
+* `functions/eventos/googleCalendarService.cjs`
+
+---
+
+## OAuth initiation flow
+
+The function:
+
+`functions/oauth2-initiateAuth.cjs`
+
+creates a Google OAuth URL using:
+
+* `GCAL_CLIENT_ID`
+* `GCAL_CLIENT_SECRET`
+* `GCAL_REDIRECT_URI`
+
+The user is redirected to Google and grants Calendar access.
+
+The requested scope is:
+
+`https://www.googleapis.com/auth/calendar`
+
+This allows the app backend to manage events in the configured calendar.
+
+---
+
+## OAuth callback flow
+
+After the user grants access, Google redirects back to:
+
+`GCAL_REDIRECT_URI`
+
+In your current production setup, that is:
+
+`https://calendario-by-tk.netlify.app/.netlify/functions/oauth2-callback`
+
+The callback function:
+
+`functions/oauth2-callback.cjs`
+
+exchanges the authorization code for tokens.
+
+### Important current behaviour
+
+The callback no longer stores the refresh token in local storage.
+
+Instead, it displays the returned refresh token so it can be copied and saved as:
+
+`GCAL_REFRESH_TOKEN`
+
+This is important because the real Google Calendar operations happen server-side in Netlify Functions, not in the browser.
+
+Saving the token only in the browser would not allow the backend to authenticate.
+
+---
+
+## Why `GCAL_REFRESH_TOKEN` matters
+
+The current Google Calendar service is initialized in:
+
+`functions/eventos/googleCalendarService.cjs`
+
+That file creates an OAuth client and sets credentials with:
+
+* `GCAL_CLIENT_ID`
+* `GCAL_CLIENT_SECRET`
+* `GCAL_REDIRECT_URI`
+* `GCAL_REFRESH_TOKEN`
+
+If `GCAL_REFRESH_TOKEN` is missing, the backend cannot make authenticated Google Calendar API calls.
+
+That means functions such as:
+
+* list events
+* create event
+* update event
+* delete event
+* export ICS
+* import ICS
+
+will fail even if the app frontend loads correctly.
+
+---
+
+## Calendar assignment behaviour
+
+## Purpose
+
+Once the backend is authenticated against Google Calendar, it still needs to know **which calendar** to operate on.
+
+This is controlled by:
+
+`CALENDAR_ID`
+
+---
+
+## Current calendar assignment
+
+In your `.env`, the current value is:
+
+```env
+CALENDAR_ID=estudiovgh@yahoo.com
+```
+
+This means the server-side functions target that specific Google Calendar.
+
+In practice, this is the calendar used by the Google account:
+
+`estudiovgh@yahoo.com`
+
+as long as that account either:
+
+* owns the calendar, or
+* has sufficient permissions on it
+
+---
+
+## Where `CALENDAR_ID` is used
+
+The value is consumed in:
+
+`functions/eventos/googleCalendarService.cjs`
+
+That service passes `calendarId: CALENDAR_ID` to Google Calendar API calls such as:
+
+* `calendar.events.list`
+* `calendar.events.insert`
+* `calendar.events.update`
+* `calendar.events.delete`
+
+So all event operations are assigned to the calendar identified by `CALENDAR_ID`.
+
+---
+
+## What happens if `CALENDAR_ID` is omitted
+
+The backend service currently falls back to:
+
+`primary`
+
+This means:
+
+* if `CALENDAR_ID` is not set
+* the Google-authenticated account's primary calendar is used
+
+However, when you explicitly want a known specific calendar, setting `CALENDAR_ID` is clearer and safer.
+
+---
+
+## Relationship between Google account and assigned calendar
+
+These are related but not identical concepts.
+
+### Google-authenticated account
+
+This is the account represented by the OAuth tokens and refresh token.
+
+In your case, the intended account is:
+
+`estudioVGH@yahoo.com`
+
+### Assigned calendar
+
+This is the calendar selected through `CALENDAR_ID`.
+
+In your case:
+
+`estudiovgh@yahoo.com`
+
+The backend will only work correctly if the authenticated account has permission to access the assigned calendar.
+
+Usually this is fine when both refer to the same Google account's calendar, but it is still useful to understand the distinction.
+
+---
+
+## Timezone behaviour at backend level
+
+The backend also uses:
+
+`TIMEZONE=America/Argentina/Cordoba`
+
+This is the default timezone fallback used by the Google Calendar service when a draft does not explicitly provide one.
+
+However, in the normal ICS-first flow, the draft usually already includes a timezone chosen in the frontend.
+
+So the effective order is:
+
+1. use the draft timezone if present
+2. otherwise use backend `TIMEZONE`
+3. otherwise use the service fallback
+
+This helps keep Google Calendar operations consistent.
+
+---
+
+## SITE_URL behaviour
+
+The variable:
+
+`SITE_URL=https://calendario-by-tk.netlify.app`
+
+exists to define the base app domain when a runtime URL is not available.
+
+Historically this is useful because:
+
+* production and local environments may differ
+* Netlify Dev does not always expose `process.env.URL` the same way as production
+
+In the current OAuth setup, the main redirect authority should still be:
+
+`GCAL_REDIRECT_URI`
+
+That variable should exactly match the redirect URI registered in the Google Cloud Console.
+
+So `SITE_URL` is contextual and helpful, but not the authoritative source for Google OAuth callback resolution in the current implementation.
+
+---
+
+## Backend functions affected by Google auth and calendar assignment
+
+The following functions depend on correct Google server auth and correct calendar assignment:
+
+* `functions/eventos/index.cjs`
+* `functions/eventos-by-id.cjs`
+* `functions/ics/import.cjs`
+* `functions/ics/export.cjs`
+* `functions/eventos/googleCalendarService.cjs`
+
+The following functions are specifically part of the OAuth setup:
+
+* `functions/oauth2-initiateAuth.cjs`
+* `functions/oauth2-callback.cjs`
+
+If Google auth is broken, these higher-level calendar functions will fail.
+
+If app auth is broken, the UI may be exposed, but that does not change which calendar the backend functions use.
+
+---
+
+## Expected setup sequence
+
+A coherent setup looks like this:
+
+1. configure the frontend access code with `VITE_AUTH_CODE`
+2. configure Google OAuth variables:
+
+   * `GCAL_CLIENT_ID`
+   * `GCAL_CLIENT_SECRET`
+   * `GCAL_REDIRECT_URI`
+3. run the OAuth flow once to obtain a refresh token
+4. store that refresh token as `GCAL_REFRESH_TOKEN`
+5. set `CALENDAR_ID` to the intended calendar
+6. set `TIMEZONE` to the desired backend default timezone
+7. start the app and test list/create/update/delete operations
+
+---
+
+## Practical summary
+
+### To open the app
+
+The user must pass the frontend access gate controlled by:
+
+`VITE_AUTH_CODE`
+
+### To let the backend operate on Google Calendar
+
+The server must have valid Google OAuth configuration:
+
+* `GCAL_CLIENT_ID`
+* `GCAL_CLIENT_SECRET`
+* `GCAL_REDIRECT_URI`
+* `GCAL_REFRESH_TOKEN`
+
+### To choose which calendar is used
+
+The backend uses:
+
+`CALENDAR_ID`
+
+### To control the backend timezone fallback
+
+The backend uses:
+
+`TIMEZONE`
+
+---
+
+## Responsibilities by layer
+
+### `AuthGate`
+
+Responsible for:
+
+* deciding whether to show the app or the auth screen
+* capturing the user input code
+* showing validation errors
+* switching to allowed state after success
+
+### `authService`
+
+Responsible for:
+
+* reading the configured access code
+* deciding whether app auth is required
+* validating the submitted code
+* reading and writing authenticated state in local storage
+
+### `oauth2-initiateAuth.cjs`
+
+Responsible for:
+
+* generating the Google authorization URL
+
+### `oauth2-callback.cjs`
+
+Responsible for:
+
+* exchanging the authorization code for tokens
+* exposing the refresh token so it can be stored securely as server environment config
+
+### `googleCalendarService.cjs`
+
+Responsible for:
+
+* authenticating server-side Google Calendar API usage
+* selecting the calendar through `CALENDAR_ID`
+* applying backend timezone fallback when needed
+* performing event CRUD operations
+
+---
+
+## Key principle
+
+The key principle is:
+
+**frontend access auth decides who may open the app, while backend Google auth and `CALENDAR_ID` decide which calendar the server functions can operate on.**
+
+```
+
+Si querés, el siguiente te lo puedo redactar como `.md` de **environment variables reference**, más corto y tipo documentación técnica pura.
+```
+# AI Event Creation Behaviour
+
+## Purpose
+
+The AI event creation flow allows the user to describe an event in natural language and progressively reach a complete, valid event draft.
+
+The app remains **ICS-first**, so even when the event is created through AI:
+
+- the event is **not created immediately**
+- the assistant may ask follow-up questions
+- once enough data exists, the app generates an `.ics` preview
+- the user must explicitly confirm before creation
+
+---
+
+## Main Goal
+
+Make event creation faster and more natural without removing user control.
+
+The AI flow should help the user:
+
+- describe an event in plain language
+- avoid manual field-by-field entry when possible
+- get asked clarifying questions if key information is missing
+- still review the exact `.ics` content before confirming
+
+---
+
+## Core Components Involved
+
+### UI
+- `src/pages/Calendario.jsx`
+- `src/components/AiEventComposer.jsx`
+- `src/components/TimezoneField.jsx`
+- `src/components/IcsPreview.jsx`
+
+### Services
+- `src/services/aiEventService.js`
+- `src/services/eventDraftService.js`
+- `src/services/icsService.js`
+- `src/services/timezoneService.js`
+
+### Persistence / API
+- `src/services/calendarService.js`
+- `functions/ai/event-draft.cjs`
+- `functions/eventos/index.cjs`
+
+---
+
+## Security Principle
+
+The frontend must **not** call an AI provider directly with a secret API key.
+
+The browser-facing app calls a backend endpoint:
+
+`/api/ai/event-draft`
+
+That backend is responsible for:
+
+- interpreting the user prompt
+- optionally integrating with an external AI provider later
+- keeping credentials secret
+- returning structured responses to the frontend
+
+This is important because frontend environment variables are not a safe place for secret API keys.
+
+---
+
+## Entry Point
+
+The AI creation flow starts from the calendar page when the user clicks:
+
+`Crear con IA`
+
+This opens the modal in **AI mode**.
+
+---
+
+## Shared timezone behaviour
+
+The AI flow includes a timezone selector just like the manual flow.
+
+### Why
+
+Natural language requests often omit timezone or assume a local one.
+
+### Behaviour
+
+- the AI composer shows a timezone dropdown
+- the selected timezone is persisted in local storage
+- the selected timezone is also reused as the initial value in future AI event drafts
+
+### Effect on interpretation
+
+The selected timezone helps the backend interpret ambiguous requests consistently.
+
+For example, if the user says:
+
+`Tomorrow at 7:30 pm`
+
+the selected timezone influences how that is resolved.
+
+---
+
+## AI conversation model
+
+The AI event flow behaves like a structured mini-conversation.
+
+The user sends a message such as:
+
+`Next Thursday at 7:30 pm I want to play Baldur's Gate 3 with Dani for 90 minutes on Steam.`
+
+The app sends the following to the backend:
+
+- the current user message
+- the selected timezone
+- prior AI conversation history
+
+The backend returns a structured response.
+
+---
+
+## Expected backend response shapes
+
+The backend returns one of two broad outcomes.
+
+### 1. More information is still needed
+
+Example shape:
+
+```json
+{
+  "status": "needs_more_info",
+  "assistantMessage": "What time should the event start?",
+  "missingFields": ["startDateTime"],
+  "draft": {
+    "summary": "Baldur's Gate 3 with Dani",
+    "location": "Online (Steam)",
+    "durationMinutes": 90,
+    "timeZone": "Europe/Dublin"
+  }
+}
+
+2. Enough information exists to generate the draft
+
+Example shape:
+
+{
+  "status": "ready",
+  "assistantMessage": "I have enough information to generate the event.",
+  "draft": {
+    "summary": "Baldur's Gate 3 (Steam) - Play with Dani",
+    "startDateTime": "2026-04-10T19:30",
+    "durationMinutes": 90,
+    "location": "Online (Steam)",
+    "description": "Virtual gaming session on Steam with Dani.",
+    "timeZone": "Europe/Dublin",
+    "uid": "",
+    "status": "CONFIRMED",
+    "productId": "-//Santiago Haspert Piaggio//Calendar ICS//EN",
+    "categories": [],
+    "notes": ""
+  }
+}
+
+Minimum information required before preview
+
+The AI flow must keep asking follow-up questions until there is enough information to generate a valid event draft.
+
+At minimum, the app should not proceed to ICS preview without:
+
+summary / event title
+start date and time
+duration or end time
+timezone
+
+Location and description are useful but may remain optional.
+
+Follow-up question behaviour
+
+If the user message does not contain enough data, the assistant should ask follow-up questions as many times as needed.
+
+Example
+
+User says:
+
+I want to have dinner with Laura next week.
+
+Possible assistant reply:
+
+Sure. What day and time should it start?
+
+If the user then says:
+
+Wednesday at 8 pm
+
+but no duration is provided, the assistant may ask:
+
+How long should I make the event?
+
+This loop continues until the backend returns status: "ready".
+
+Frontend conversation behaviour
+
+The frontend AI component keeps a lightweight conversation history.
+
+It stores messages in order, for example:
+
+user message
+assistant reply
+user follow-up
+assistant reply
+
+This history is sent back with each new turn so the backend can interpret context correctly.
+
+The frontend displays this conversation clearly so the user understands the current state.
+
+Draft generation behaviour
+
+Once the backend returns status: "ready" and includes a valid draft:
+
+the frontend normalizes the payload into the app's internal draft shape
+the app generates the ICS string
+the UI switches from conversation mode to preview mode
+
+From that point onward, the AI flow behaves like manual creation.
+
+Preview step is mandatory
+
+Even in AI mode, the generated event must go through the same preview stage.
+
+The preview must show:
+
+a human-readable event summary
+the raw .ics content
+actions to:
+confirm
+go back
+cancel
+
+This ensures AI suggestions are always visible and reviewable before persistence.
+
+Confirmation behaviour
+
+The AI flow must not persist the event before preview confirmation.
+
+After confirmation, the app sends:
+
+the normalized draft
+the generated icsContent
+a source marker
+
+to the persistence layer.
+
+Only then is the event actually created.
+
+Cancel behaviour
+
+If the user cancels at any point before confirmation:
+
+no event is created
+no partial draft is persisted
+the modal closes
+the temporary AI conversation state is discarded
+
+The only persistent side effect may be the saved timezone preference.
+
+Error behaviour
+
+The frontend should handle AI-related failures gracefully.
+
+Possible failure cases include:
+
+backend unavailable
+invalid backend response
+malformed draft
+timeout
+unexpected parsing errors
+Expected UI behaviour
+
+If an error happens:
+
+keep the modal open
+preserve the user context when possible
+show a human-readable error message
+allow the user to retry
+
+The flow should never silently fail.
+
+Responsibilities by layer
+AiEventComposer
+
+Responsible for:
+
+capturing user messages
+displaying conversation state
+managing timezone selection
+requesting AI turns from the backend
+triggering preview generation when draft is ready
+aiEventService
+
+Responsible for:
+
+HTTP communication with the backend AI endpoint
+eventDraftService
+
+Responsible for:
+
+normalizing backend draft payloads into the app's internal shape
+icsService
+
+Responsible for:
+
+validating the draft
+generating the final .ics content
+calendarService
+
+Responsible for:
+
+creating the actual event only after confirmation
+Current implementation note
+
+The current backend implementation at functions/ai/event-draft.cjs is intentionally simple.
+
+At the moment it uses lightweight heuristic parsing and structured follow-up logic instead of a full external AI integration.
+
+That means:
+
+the frontend contract is already in place
+the backend route already exists
+a real provider integration can be added later without changing the frontend flow
+
+This keeps the architecture secure and consistent while allowing the AI layer to evolve independently.
+
+UX principles
+
+The AI event flow should feel:
+
+helpful
+conversational
+precise
+reviewable
+safe
+
+The AI is meant to reduce typing, not to bypass control.
+
+The most important principle is:
+
+AI can prepare the event, but the user still confirms the ICS before creation.
+
+
+Hay dos mejoras clave respecto al original:
+
+1. **arregla el markdown roto** de los bloques JSON y encabezados  
+2. **lo alinea con tu estado real actual**, donde ya existe `functions/ai/event-draft.cjs`, pero hoy funciona con parsing heurístico y no con OpenAI real
+
+Si querés, seguimos con `auth-gate-behaviour.md`.### Comandos
+
+find src \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.css" -o -name "*.json" -o -name "*.md" \) \
+  ! -name "*.d.ts" \
+  -type f \
+  -print0 | xargs -0 cat > unificadoSRC.txt
+
+
+find functions -name "*.cjs" -type f -print0 | xargs -0 cat > unificadoFunctions.txt
+
+
+
+cat \
+src/components/ejemplo-poner-archivoreal \
+src/app/api/acaotroejemplo\
+> losarchivosquetepedi.txt
+
+cat \
+src/components/RealtimeHelper.tsx \
+src/components/realtime/useRealtimeController.ts \
+src/components/realtime/realtimeEventHandler.ts \
+src/components/realtime/realtimeRtc.ts \
+src/components/realtime/realtimeServerApi.ts \
+src/app/api/conversations/save/route.ts \
+src/components/SavedConversations.tsx \
+> realtime-helper-relevant.txt# Manual Event Creation Behaviour
+
+Sí. Este también conviene actualizarlo para que quede bien alineado con la implementación actual y con la forma en que ya resolvimos IA, preview, create/update y lectura de eventos existentes.
+
+Te dejo una versión corregida y coherente para reemplazar completa en `src/docs/manual-event-behaviour.md`:
+
+```md
+# Manual Event Creation Behaviour
+
+## Purpose
+
+The manual event creation flow is designed to make the app **ICS-first**.
+
+This means a manual event is **not created immediately** when the user fills the form.  
+Instead, the app first builds an internal draft, generates an `.ics` preview, and only creates or updates the event **after explicit user confirmation**.
+
+---
+
+## Main Goal
+
+Provide a simple, user-friendly event creation flow centered around the final `.ics` output.
+
+The user should always be able to:
+
+- enter the minimum required event information easily
+- optionally expand into advanced fields
+- preview the generated `.ics` content before confirming
+- go back and edit if something is wrong
+- confirm only when the generated file looks correct
+
+---
+
+## Entry Points
+
+The manual flow can begin from:
+
+- **Home page**
+  - the user navigates to the calendar management page
+- **Calendar page**
+  - clicking **"Nuevo evento manual"**
+- **Existing calendar event**
+  - clicking **"Editar"** on an existing event
+
+---
+
+## Core Components Involved
+
+### UI
+- `src/pages/Calendario.jsx`
+- `src/components/EventForm.jsx`
+- `src/components/TimezoneField.jsx`
+- `src/components/AdvancedEventFields.jsx`
+- `src/components/IcsPreview.jsx`
+
+### Services and helpers
+- `src/services/eventDraftService.js`
+- `src/services/icsService.js`
+- `src/services/timezoneService.js`
+- `src/utils/dateTime.js`
+- `src/utils/icsText.js`
+
+### Persistence / API
+- `src/services/calendarService.js`
+- `functions/eventos/index.cjs`
+- `functions/eventos-by-id.cjs`
+
+---
+
+## Flow Overview
+
+## 1. Open manual event form
+
+When the user clicks **"Nuevo evento manual"**, the app opens the modal in **manual creation mode**.
+
+At this point:
+
+- there is no persisted event yet
+- there is no generated `.ics` yet
+- the form is initialized with defaults
+
+### Default values
+
+The form starts with:
+
+- empty event title
+- current date
+- near-future default start time
+- default duration of 60 minutes
+- empty location
+- timezone loaded from local storage if available
+- advanced fields collapsed by default
+
+If the user is editing an existing event instead of creating a new one, the form is pre-filled from the existing event data.
+
+---
+
+## 2. Required fields in simple mode
+
+The simple manual flow collects the minimum information needed to build a valid ICS event:
+
+- **Event name**
+- **Date**
+- **Start time**
+- **Timezone**
+- **Duration in minutes**
+- **Location** optional from a technical point of view, but part of the normal user-facing flow
+
+The system combines:
+
+- `date`
+- `time`
+
+into a single internal local datetime value such as:
+
+`2026-04-10T19:30`
+
+Then it calculates the end datetime using the duration.
+
+---
+
+## 3. Timezone behaviour
+
+Timezone handling is shared between manual and AI creation.
+
+### Dropdown
+
+The timezone field shows a dropdown with popular timezone options focused on Europe and the Americas.
+
+### Manual option
+
+If the user needs another timezone, they can choose:
+
+`Otra (escribir manualmente)`
+
+and enter it as free text.
+
+### Persistence
+
+The selected timezone is saved to local storage.
+
+### Reset rule
+
+When the user creates a new manual event later:
+
+- all regular form fields reset
+- the timezone remains preselected from local storage
+
+This is intentional, because timezone is expected to be reused often.
+
+---
+
+## 4. Advanced mode
+
+The form contains a toggle for **advanced mode**.
+
+### Behaviour
+
+By default, advanced mode is hidden in manual creation.
+
+If the user expands it, the form may show additional fields such as:
+
+- description
+- status
+- manual UID override
+- PRODID
+- categories
+- internal notes
+
+### Purpose
+
+Advanced mode is meant for users who want more control over the generated `.ics` structure without making the simple flow harder to use.
+
+### Editing
+
+When editing an existing event, advanced mode is opened by default so richer event data can be reviewed and preserved more easily.
+
+---
+
+## 5. Submit does not create the event yet
+
+When the user clicks:
+
+`Generar vista previa ICS`
+
+the app does **not** call the final create endpoint yet.
+
+Instead, the app:
+
+1. validates required fields
+2. builds an internal draft object
+3. computes:
+   - `startDateTime`
+   - `endDateTime`
+   - `durationMinutes`
+   - `timeZone`
+4. generates the ICS string from the draft
+5. switches from form view to preview view
+
+This is the central behaviour of the manual flow.
+
+---
+
+## 6. ICS preview step
+
+The preview screen is mandatory.
+
+It shows:
+
+### Human-readable summary
+
+A clean summary of the event, including:
+
+- title
+- start
+- end
+- duration
+- location
+- timezone
+- description if present
+
+### Raw `.ics` content
+
+The exact text content that will represent the event.
+
+This lets the user verify that the generated file is correct before anything is saved.
+
+### Available actions
+
+At preview stage, the user can:
+
+- **Confirmar creación** or **Confirmar actualización**
+- **Volver a editar**
+- **Cancelar**
+- **Copiar** the ICS content
+
+---
+
+## 7. Final confirmation
+
+Only after clicking confirm in the preview step does the app persist the event.
+
+### For new events
+
+The app sends:
+
+- the normalized draft
+- the generated `icsContent`
+- a source marker such as `ics-preview`
+
+to the persistence layer.
+
+### For existing events
+
+The same preview-confirmation rule applies to updates.
+
+The event is only updated after the user confirms the new `.ics` preview.
+
+---
+
+## 8. Cancel behaviour
+
+If the user cancels from the form or preview:
+
+- no event is created
+- no update is saved
+- the modal closes
+- temporary draft state is discarded
+
+The only persistent side effect that may remain is the saved timezone preference in local storage.
+
+---
+
+## 9. Edit behaviour
+
+Editing follows the same philosophy as creation.
+
+### Expected flow
+
+1. user clicks **Editar**
+2. the existing event is converted into an internal draft
+3. the form opens with pre-filled values
+4. the user changes data
+5. the app generates a new `.ics` preview
+6. the user confirms the update
+7. only then is the event updated
+
+This keeps the app consistently ICS-first for both creation and editing.
+
+---
+
+## 10. View existing ICS behaviour
+
+The calendar list also allows the user to inspect an existing event as an ICS preview without immediately entering edit mode.
+
+### Expected flow
+
+1. user clicks **Ver ICS**
+2. the existing event is converted into an internal draft
+3. the app generates the `.ics` content
+4. the modal opens directly in preview mode
+
+In this read-only preview case, the user can review the generated ICS and close the modal, but that action does not itself create or update anything.
+
+---
+
+## 11. Validation expectations
+
+The form prevents preview generation if the minimum required data is missing.
+
+At minimum, the system rejects preview generation when any of the following is missing:
+
+- event name
+- start date
+- start time
+- duration
+- timezone
+
+The ICS service also rejects invalid draft generation if required core values are missing.
+
+It also rejects cases where:
+
+- the draft is malformed
+- start or end datetime is invalid
+- the end is not later than the start
+- duration is not a valid positive number
+
+---
+
+## 12. Relationship with calendar storage
+
+The manual form is responsible for collecting user input and generating preview state.
+
+It is **not** responsible for final persistence logic.
+
+Persistence belongs mainly to:
+
+- `src/services/calendarService.js`
+- `functions/eventos/index.cjs`
+- `functions/eventos-by-id.cjs`
+
+ICS generation belongs to:
+
+- `src/services/icsService.js`
+
+Form normalization belongs to:
+
+- `src/services/eventDraftService.js`
+
+This separation keeps the code easier to maintain and reduces the risk of breaking unrelated functionality.
+
+---
+
+## 13. Data shape and normalization
+
+The manual flow works with an internal normalized draft shape before any persistence happens.
+
+Typical fields include:
+
+- `summary`
+- `description`
+- `location`
+- `startDateTime`
+- `endDateTime`
+- `durationMinutes`
+- `timeZone`
+- `uid`
+- `status`
+- `productId`
+- `categories`
+- `notes`
+
+This draft is the source of truth for preview generation.
+
+Only after confirmation is it translated into the backend payload used for create or update.
+
+---
+
+## 14. Expected UX principles
+
+The manual event flow should feel:
+
+- predictable
+- reversible before confirmation
+- easy in simple mode
+- more flexible in advanced mode
+- centered on the generated `.ics` file, not on opaque background event objects
+
+The user should always understand that:
+
+**the preview is the final checkpoint before creation or update.**
+```
+
+Las mejoras principales frente al original son estas:
+
+* lo alineé con los **nombres reales de la UI actual**: `Nuevo evento manual`, `Editar`, `Generar vista previa ICS`
+* agregué el comportamiento real de **“Ver ICS”**, que en tu implementación actual existe y merece quedar documentado
+* lo alineé con la arquitectura actual de persistencia:
+
+  * `calendarService.js`
+  * `functions/eventos/index.cjs`
+  * `functions/eventos-by-id.cjs`
+* reforcé la parte de **validación real**, no solo la ideal
+* dejé más claro que el **draft normalizado** es la verdad interna antes de persistir
+
+Seguimos con el siguiente `.md`.
+# Tree
+
+src
+├── App.jsx
+├── components
+│   ├── AdvancedEventFields.jsx
+│   ├── AiEventComposer.jsx
+│   ├── AuthGate.jsx
+│   ├── CalendarList.jsx
+│   ├── EventForm.jsx
+│   ├── IcsPreview.jsx
+│   └── TimezoneField.jsx
+├── constants
+│   ├── storageKeys.js
+│   └── timezones.js
+├── docs
+│   ├── ai-event-behaviour.md
+│   ├── comandos.md
+│   ├── manual-event-behaviour.md
+│   └── tree.md
+├── index.css
+├── main.jsx
+├── pages
+│   ├── Calendario.jsx
+│   ├── Home.jsx
+│   └── ImportExport.jsx
+├── services
+│   ├── aiEventService.js
+│   ├── authService.js
+│   ├── calendarService.js
+│   ├── eventDraftService.js
+│   ├── icsService.js
+│   └── timezoneService.js
+├── styles
+│   ├── calendario.css
+│   ├── home.css
+│   └── importexport.css
+└── utils
+    ├── dateTime.js
+    └── icsText.js
+
+functions
+├── ai
+│   └── event-draft.cjs
+├── eventos
+│   ├── delete.cjs
+│   ├── googleCalendarService.cjs
+│   ├── index.cjs
+│   └── update.js
+├── eventos-by-id.cjs
+├── ics
+│   ├── export.cjs
+│   └── import.cjs
+├── oauth2-callback.cjs
+├── oauth2-initiateAuth.cjs
+└── services
+# package.json and netlify.toml
+
+{
+  "name": "calendario",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview",
+    "netlify:dev": "netlify dev",
+    "clean:install": "rm -rf node_modules package-lock.json && npm install"
+  },
+  "dependencies": {
+    "googleapis": "^150.0.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react-swc": "^3.10.2",
+    "netlify-cli": "^22.2.0",
+    "vite": "^7.0.0"
+  }
+}
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "functions"
+
+[dev]
+  command = "npm run dev"
+  targetPort = 3001
+  publish = "dist"
+  autoLaunch = false
+
+[[redirects]]
+  from = "/api/eventos"
+  to = "/.netlify/functions/eventos"
+  status = 200
+
+[[redirects]]
+  from = "/api/eventos/:id"
+  to = "/.netlify/functions/eventos-by-id"
+  status = 200
+
+[[redirects]]
+  from = "/api/ai/event-draft"
+  to = "/.netlify/functions/ai/event-draft"
+  status = 200
+
+[[redirects]]
+  from = "/api/ics/import"
+  to = "/.netlify/functions/ics/import"
+  status = 200
+
+[[redirects]]
+  from = "/api/ics/export"
+  to = "/.netlify/functions/ics/export"
+  status = 200
+
+[[redirects]]
+  from = "/oauth/google/init"
+  to = "/.netlify/functions/oauth2-initiateAuth"
+  status = 200
+
+[[redirects]]
+  from = "/oauth/google/callback"
+  to = "/.netlify/functions/oauth2-callback"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200/* src/styles/home.css */
+
+.home-container {
+    width: min(1100px, calc(100% - 2rem));
+    margin: 0 auto;
+    min-height: 100vh;
+    padding: 3rem 0 2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2rem;
+}
+
+.home-hero {
+    text-align: center;
+}
+
+.home-title {
+    font-size: clamp(2.25rem, 5vw, 3.5rem);
+    margin: 0 0 0.75rem;
+    color: #172033;
+}
+
+.home-subtitle {
+    font-size: 1.1rem;
+    line-height: 1.7;
+    max-width: 760px;
+    margin: 0 auto;
+    color: #5b6472;
+}
+
+.home-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem;
+}
+
+.home-option {
+    background: #fff;
+    border: 1px solid #d7deea;
+    border-radius: 16px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.home-option:hover {
+    transform: translateY(-2px);
+    border-color: #a9b8d3;
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.1);
+}
+
+.home-option-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #172033;
+}
+
+.home-option-text {
+    color: #5b6472;
+    line-height: 1.6;
+}
+
+.home-info-card {
+    background: #fff;
+    border: 1px solid #d7deea;
+    border-radius: 16px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.home-info-title {
+    margin: 0 0 0.4rem;
+    font-size: 1.05rem;
+    color: #172033;
+}
+
+.home-info-text {
+    margin: 0;
+    color: #5b6472;
+    line-height: 1.65;
+}
+
+.home-footer {
+    text-align: center;
+    font-size: 0.92rem;
+    color: #7b8798;
+    padding-top: 0.5rem;
+}
+
+@media (max-width: 768px) {
+    .home-container {
+        padding-top: 2rem;
+        justify-content: flex-start;
+    }
+
+    .home-options {
+        grid-template-columns: 1fr;
+    }
+}/* src/styles/calendario.css */
+
+.calendario-container {
+    width: min(1120px, calc(100% - 2rem));
+    margin: 0 auto;
+    min-height: 100vh;
+    padding: 2rem 0 3rem;
+}
+
+.calendario-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.calendario-title {
+    font-size: 2rem;
+    color: #172033;
+    margin: 0;
+}
+
+.calendario-subtitle {
+    margin: 0.35rem 0 0;
+    color: #5b6472;
+    line-height: 1.6;
+}
+
+.calendario-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.calendario-actions > button {
+    padding: 0.7rem 1rem;
+    background: #2563eb;
+    color: #fff;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.calendario-actions > button:hover {
+    background: #1d4ed8;
+}
+
+.calendario-actions > .calendario-secondary-button {
+    background: #fff;
+    color: #172033;
+    border-color: #d7deea;
+}
+
+.calendario-actions > .calendario-secondary-button:hover {
+    background: #f8fafc;
+}
+
+.calendario-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.calendario-loading,
+.calendario-error {
+    font-size: 1rem;
+    text-align: center;
+    margin-top: 2rem;
+}
+
+.calendario-loading {
+    color: #5b6472;
+}
+
+.calendario-error {
+    color: #991b1b;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    padding: 1rem;
+    border-radius: 12px;
+}
+
+.calendar-empty-state {
+    text-align: center;
+    color: #5b6472;
+    background: #fff;
+    border: 1px solid #d7deea;
+    border-radius: 16px;
+    padding: 2rem 1rem;
+}
+
+.calendar-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 1rem;
+}
+
+.calendar-card {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.25rem;
+    background: #fff;
+    border: 1px solid #d7deea;
+    border-radius: 16px;
+    padding: 1.25rem;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.calendar-card-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.calendar-card-title {
+    margin: 0 0 0.45rem;
+    font-size: 1.15rem;
+    color: #172033;
+}
+
+.calendar-card-time {
+    margin: 0 0 0.65rem;
+    color: #334155;
+    font-weight: 600;
+}
+
+.calendar-card-meta {
+    margin: 0.35rem 0;
+    color: #5b6472;
+    line-height: 1.6;
+}
+
+.calendar-card-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    min-width: 140px;
+}
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.52);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.modal-content {
+    background: #fff;
+    border-radius: 18px;
+    width: min(720px, 100%);
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+    position: relative;
+    border: 1px solid #d7deea;
+    overflow: hidden;
+}
+
+.modal-content-wide {
+    width: min(920px, 100%);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid #e5eaf3;
+}
+
+.modal-title {
+    margin: 0;
+    font-size: 1.15rem;
+    color: #172033;
+}
+
+.modal-close-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.4rem;
+    color: #7b8798;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.modal-close-btn:hover {
+    color: #172033;
+}
+
+.event-form {
+    padding: 1.5rem;
+}
+
+.event-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.event-form-field {
+    display: flex;
+    flex-direction: column;
+}
+
+.event-form-field-full {
+    grid-column: 1 / -1;
+}
+
+.event-form-toggle-row {
+    margin-top: 1rem;
+}
+
+.event-form-link-button {
+    border: none;
+    background: transparent;
+    color: #2563eb;
+    padding: 0;
+    font-weight: 600;
+}
+
+.event-form-link-button:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+.event-form-actions {
+    margin-top: 1.5rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+    .calendario-header {
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 768px) {
+    .event-form-grid,
+    .calendar-card {
+        grid-template-columns: 1fr;
+        display: grid;
+    }
+
+    .calendar-card {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .calendar-card-actions {
+        min-width: auto;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+}/* src/styles/importexport.css */
+
+.importexport-container {
+    width: min(1100px, calc(100% - 2rem));
+    margin: 0 auto;
+    min-height: 100vh;
+    padding: 2rem 0 3rem;
+}
+
+.importexport-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.importexport-title {
+    margin: 0;
+    font-size: 2rem;
+    color: #172033;
+}
+
+.importexport-subtitle {
+    margin: 0.35rem 0 0;
+    color: #5b6472;
+    line-height: 1.6;
+}
+
+.importexport-panel {
+    background: #fff;
+    border: 1px solid #d7deea;
+    border-radius: 18px;
+    padding: 1.5rem;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.importexport-label {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+    color: #172033;
+}
+
+.importexport-textarea {
+    width: 100%;
+    min-height: 380px;
+    resize: vertical;
+    border: 1px solid #d7deea;
+    border-radius: 12px;
+    padding: 1rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: #172033;
+    background: #fbfcfe;
+}
+
+.importexport-actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.importexport-button,
+.importexport-secondary-button {
+    min-height: 42px;
+    padding: 0.7rem 1rem;
+    border-radius: 10px;
+    font-weight: 600;
+    border: 1px solid transparent;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.importexport-button {
+    background: #2563eb;
+    color: #fff;
+}
+
+.importexport-button:hover {
+    background: #1d4ed8;
+}
+
+.importexport-secondary-button {
+    background: #fff;
+    color: #172033;
+    border-color: #d7deea;
+}
+
+.importexport-secondary-button:hover {
+    background: #f8fafc;
+}
+
+.importexport-validation {
+    margin-top: 1rem;
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+    border: 1px solid transparent;
+    font-weight: 500;
+}
+
+.importexport-validation-ok {
+    background: #ecfdf5;
+    color: #166534;
+    border-color: #bbf7d0;
+}
+
+.importexport-validation-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border-color: #fecaca;
+}
+
+.importexport-result {
+    margin-top: 1rem;
+    background: #f8fafc;
+    border: 1px solid #d7deea;
+    border-radius: 12px;
+    padding: 1rem;
+    color: #334155;
+}
+
+@media (max-width: 768px) {
+    .importexport-header {
+        flex-direction: column;
+    }
+
+    .importexport-textarea {
+        min-height: 300px;
+    }
+}// src/components/TimezoneField.jsx
+
+import React, { useEffect, useMemo, useState } from 'react'
+import {
+    DEFAULT_TIMEZONE,
+    MANUAL_TIMEZONE_OPTION
+} from '../constants/timezones'
+import {
+    getPopularTimezones,
+    getTimezoneSelectValue
+} from '../services/timezoneService'
+
+export default function TimezoneField({ value, onChange }) {
+    const timezoneOptions = useMemo(() => getPopularTimezones(), [])
+    const [selectValue, setSelectValue] = useState(getTimezoneSelectValue(value))
+    const [manualValue, setManualValue] = useState(
+        getTimezoneSelectValue(value) === MANUAL_TIMEZONE_OPTION
+            ? value
+            : DEFAULT_TIMEZONE
+    )
+
+    useEffect(() => {
+        const nextSelectValue = getTimezoneSelectValue(value)
+        setSelectValue(nextSelectValue)
+
+        if (nextSelectValue === MANUAL_TIMEZONE_OPTION) {
+            setManualValue(value || '')
+        } else if (value) {
+            setManualValue(value)
+        }
+    }, [value])
+
+    function handleSelectChange(e) {
+        const next = e.target.value
+        setSelectValue(next)
+
+        if (next === MANUAL_TIMEZONE_OPTION) {
+            const manual = manualValue || ''
+            onChange(manual)
+            return
+        }
+
+        setManualValue(next)
+        onChange(next)
+    }
+
+    function handleManualChange(e) {
+        const next = e.target.value
+        setManualValue(next)
+        onChange(next)
+    }
+
+    return (
+        <div className="timezone-field">
+            <label htmlFor="timezone-select">Zona horaria</label>
+
+            <select
+                id="timezone-select"
+                value={selectValue}
+                onChange={handleSelectChange}
+            >
+                {timezoneOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                        {option.label}
+                    </option>
+                ))}
+
+                <option value={MANUAL_TIMEZONE_OPTION}>Otra (escribir manualmente)</option>
+            </select>
+
+            {selectValue === MANUAL_TIMEZONE_OPTION && (
+                <div style={{ marginTop: '0.75rem' }}>
+                    <label htmlFor="timezone-manual">Zona horaria manual</label>
+                    <input
+                        id="timezone-manual"
+                        type="text"
+                        value={manualValue}
+                        onChange={handleManualChange}
+                        placeholder="Ej: America/Argentina/Cordoba"
+                    />
+                </div>
+            )}
+        </div>
+    )
+}
+
+// src/components/AuthGate.jsx
+
+import React, { useMemo, useState } from 'react'
+import {
+    isAuthenticated,
+    isAuthRequired,
+    persistAuthenticated,
+    validateAuthCode
+} from '../services/authService'
+
+export default function AuthGate({ children }) {
+    const authRequired = useMemo(() => isAuthRequired(), [])
+    const [allowed, setAllowed] = useState(isAuthenticated())
+    const [code, setCode] = useState('')
+    const [error, setError] = useState('')
+
+    if (!authRequired || allowed) {
+        return children
+    }
+
+    function handleSubmit(e) {
+        e.preventDefault()
+        setError('')
+
+        if (!validateAuthCode(code)) {
+            setError('Código incorrecto.')
+            return
+        }
+
+        persistAuthenticated()
+        setAllowed(true)
+    }
+
+    return (
+        <div
+            style={{
+                minHeight: '100vh',
+                display: 'grid',
+                placeItems: 'center',
+                padding: '1rem',
+                background: '#f5f7fb'
+            }}
+        >
+            <div
+                style={{
+                    width: 'min(460px, 100%)',
+                    background: '#fff',
+                    border: '1px solid #d7deea',
+                    borderRadius: '18px',
+                    padding: '1.5rem',
+                    boxShadow: '0 12px 28px rgba(15, 23, 42, 0.08)'
+                }}
+            >
+                <h1 style={{ marginTop: 0, marginBottom: '0.5rem' }}>
+                    Acceso a la app
+                </h1>
+
+                <p style={{ marginTop: 0, color: '#5b6472', lineHeight: 1.6 }}>
+                    Introduce el código de acceso. Una vez validado, quedará recordado en este navegador.
+                </p>
+
+                <form onSubmit={handleSubmit}>
+                    <label htmlFor="auth-code">Código</label>
+                    <input
+                        id="auth-code"
+                        type="password"
+                        value={code}
+                        onChange={(e) => setCode(e.target.value)}
+                        placeholder="Introduce el código"
+                        autoFocus
+                    />
+
+                    {error ? (
+                        <p className="error-text" style={{ marginBottom: 0 }}>
+                            {error}
+                        </p>
+                    ) : null}
+
+                    <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                        <button type="submit" className="button-primary">
+                            Entrar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    )
+}// src/components/CalendarList.jsx
+
+import React from 'react'
+
+function formatDateTime(value) {
+    if (!value) return '-'
+
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+        return value
+    }
+
+    return date.toLocaleString()
+}
+
+function getStartValue(ev) {
+    return ev?.start?.dateTime || ev?.start?.date || ev?.start || ''
+}
+
+function getEndValue(ev) {
+    return ev?.end?.dateTime || ev?.end?.date || ev?.end || ''
+}
+
+export default function CalendarList({ eventos, onEditar, onEliminar, onVerIcs }) {
+    if (!Array.isArray(eventos) || eventos.length === 0) {
+        return <p className="calendar-empty-state">No hay eventos próximos.</p>
+    }
+
+    return (
+        <ul className="calendar-list">
+            {eventos.map((ev) => (
+                <li key={ev.id} className="calendar-card">
+                    <div className="calendar-card-body">
+                        <h3 className="calendar-card-title">{ev.summary || 'Sin título'}</h3>
+
+                        <p className="calendar-card-time">
+                            {formatDateTime(getStartValue(ev))} - {formatDateTime(getEndValue(ev))}
+                        </p>
+
+                        {ev.location ? (
+                            <p className="calendar-card-meta">
+                                <strong>Lugar:</strong> {ev.location}
+                            </p>
+                        ) : null}
+
+                        {ev.description ? (
+                            <p className="calendar-card-meta">
+                                <strong>Descripción:</strong> {ev.description}
+                            </p>
+                        ) : null}
+
+                        {(ev.timeZone || ev.start?.timeZone || ev.end?.timeZone) ? (
+                            <p className="calendar-card-meta">
+                                <strong>Zona horaria:</strong>{' '}
+                                {ev.timeZone || ev.start?.timeZone || ev.end?.timeZone}
+                            </p>
+                        ) : null}
+                    </div>
+
+                    <div className="calendar-card-actions">
+                        <button
+                            type="button"
+                            className="button-secondary"
+                            onClick={() => onVerIcs(ev)}
+                        >
+                            Ver ICS
+                        </button>
+
+                        <button
+                            type="button"
+                            className="button-secondary"
+                            onClick={() => onEditar(ev)}
+                        >
+                            Editar
+                        </button>
+
+                        <button
+                            type="button"
+                            className="button-danger"
+                            onClick={() => onEliminar(ev.id)}
+                        >
+                            Eliminar
+                        </button>
+                    </div>
+                </li>
+            ))}
+        </ul>
+    )
+}// src/components/AdvancedEventFields.jsx
+
+import React from 'react'
+
+export default function AdvancedEventFields({ values, onChange }) {
+    return (
+        <div
+            style={{
+                marginTop: '1rem',
+                padding: '1rem',
+                border: '1px solid #d7deea',
+                borderRadius: '12px',
+                background: '#f8fafc'
+            }}
+        >
+            <div className="event-form-grid">
+                <div className="event-form-field event-form-field-full">
+                    <label htmlFor="description">Descripción</label>
+                    <textarea
+                        id="description"
+                        rows={4}
+                        value={values.description}
+                        onChange={(e) => onChange('description', e.target.value)}
+                        placeholder="Descripción opcional del evento"
+                    />
+                </div>
+
+                <div className="event-form-field">
+                    <label htmlFor="status">Status ICS</label>
+                    <select
+                        id="status"
+                        value={values.status}
+                        onChange={(e) => onChange('status', e.target.value)}
+                    >
+                        <option value="CONFIRMED">CONFIRMED</option>
+                        <option value="TENTATIVE">TENTATIVE</option>
+                        <option value="CANCELLED">CANCELLED</option>
+                    </select>
+                </div>
+
+                <div className="event-form-field">
+                    <label htmlFor="uid">UID manual</label>
+                    <input
+                        id="uid"
+                        type="text"
+                        value={values.uid}
+                        onChange={(e) => onChange('uid', e.target.value)}
+                        placeholder="Opcional. Si se deja vacío, se genera automáticamente."
+                    />
+                </div>
+
+                <div className="event-form-field event-form-field-full">
+                    <label htmlFor="productId">PRODID</label>
+                    <input
+                        id="productId"
+                        type="text"
+                        value={values.productId}
+                        onChange={(e) => onChange('productId', e.target.value)}
+                        placeholder="-//Santiago Haspert Piaggio//Calendar ICS//EN"
+                    />
+                </div>
+
+                <div className="event-form-field event-form-field-full">
+                    <label htmlFor="categories">Categorías</label>
+                    <input
+                        id="categories"
+                        type="text"
+                        value={values.categories}
+                        onChange={(e) => onChange('categories', e.target.value)}
+                        placeholder="Ej: gaming, steam, amigos"
+                    />
+                </div>
+
+                <div className="event-form-field event-form-field-full">
+                    <label htmlFor="notes">Notas internas</label>
+                    <textarea
+                        id="notes"
+                        rows={3}
+                        value={values.notes}
+                        onChange={(e) => onChange('notes', e.target.value)}
+                        placeholder="Notas opcionales para incluir en el DESCRIPTION del ICS"
+                    />
+                </div>
+            </div>
+        </div>
+    )
+}// src/components/EventForm.jsx
+
+import React, { useEffect, useMemo, useState } from 'react'
+import AdvancedEventFields from './AdvancedEventFields'
+import TimezoneField from './TimezoneField'
+import {
+    createInitialDraftState,
+    createDraftFromEvent,
+    buildDraftFromFormState,
+    getDefaultDateInputValue,
+    getDefaultTimeInputValue,
+    combineDateAndTimeToLocalDateTime
+} from '../services/eventDraftService'
+import {
+    getSavedTimezone,
+    saveTimezonePreference
+} from '../services/timezoneService'
+
+export default function EventForm({ evento, onCerrar, onGeneratePreview }) {
+    const savedTimezone = useMemo(() => getSavedTimezone(), [])
+    const [advancedMode, setAdvancedMode] = useState(false)
+    const [submitError, setSubmitError] = useState('')
+
+    const [form, setForm] = useState(() =>
+        createInitialDraftState({
+            timeZone: savedTimezone,
+            defaultDate: getDefaultDateInputValue(),
+            defaultStartTime: getDefaultTimeInputValue(),
+            defaultDurationMinutes: 60
+        })
+    )
+
+    useEffect(() => {
+        if (evento) {
+            setForm(createDraftFromEvent(evento, getSavedTimezone()))
+            setAdvancedMode(true)
+            setSubmitError('')
+            return
+        }
+
+        setForm(
+            createInitialDraftState({
+                timeZone: getSavedTimezone(),
+                defaultDate: getDefaultDateInputValue(),
+                defaultStartTime: getDefaultTimeInputValue(),
+                defaultDurationMinutes: 60
+            })
+        )
+        setAdvancedMode(false)
+        setSubmitError('')
+    }, [evento])
+
+    function updateField(name, value) {
+        setForm((prev) => ({
+            ...prev,
+            [name]: value
+        }))
+    }
+
+    function handleTimezoneChange(nextTimezone) {
+        saveTimezonePreference(nextTimezone)
+        updateField('timeZone', nextTimezone)
+    }
+
+    function handleSubmit(e) {
+        e.preventDefault()
+        setSubmitError('')
+
+        try {
+            const startDateTime = combineDateAndTimeToLocalDateTime(form.date, form.time)
+
+            const draft = buildDraftFromFormState({
+                ...form,
+                startDateTime
+            })
+
+            onGeneratePreview(draft)
+        } catch (error) {
+            console.error(error)
+            setSubmitError(error.message || 'No se pudo generar la vista previa ICS.')
+        }
+    }
+
+    return (
+        <form onSubmit={handleSubmit} className="event-form">
+            <div className="event-form-grid">
+                <div className="event-form-field event-form-field-full">
+                    <label htmlFor="summary">Nombre del evento</label>
+                    <input
+                        id="summary"
+                        name="summary"
+                        value={form.summary}
+                        onChange={(e) => updateField('summary', e.target.value)}
+                        placeholder="Ej: Baldur's Gate 3 con Dani"
+                        required
+                    />
+                </div>
+
+                <div className="event-form-field">
+                    <label htmlFor="date">Fecha</label>
+                    <input
+                        id="date"
+                        type="date"
+                        name="date"
+                        value={form.date}
+                        onChange={(e) => updateField('date', e.target.value)}
+                        required
+                    />
+                </div>
+
+                <div className="event-form-field">
+                    <label htmlFor="time">Hora de inicio</label>
+                    <input
+                        id="time"
+                        type="time"
+                        name="time"
+                        value={form.time}
+                        onChange={(e) => updateField('time', e.target.value)}
+                        required
+                    />
+                </div>
+
+                <div className="event-form-field">
+                    <label htmlFor="durationMinutes">Duración en minutos</label>
+                    <input
+                        id="durationMinutes"
+                        type="number"
+                        min="1"
+                        step="1"
+                        name="durationMinutes"
+                        value={form.durationMinutes}
+                        onChange={(e) => updateField('durationMinutes', e.target.value)}
+                        required
+                    />
+                </div>
+
+                <div className="event-form-field">
+                    <label htmlFor="location">Lugar</label>
+                    <input
+                        id="location"
+                        name="location"
+                        value={form.location}
+                        onChange={(e) => updateField('location', e.target.value)}
+                        placeholder="Ej: Online (Steam) o Dublin"
+                    />
+                </div>
+
+                <div className="event-form-field event-form-field-full">
+                    <TimezoneField
+                        value={form.timeZone}
+                        onChange={handleTimezoneChange}
+                    />
+                </div>
+            </div>
+
+            <div className="event-form-toggle-row">
+                <button
+                    type="button"
+                    className="event-form-link-button"
+                    onClick={() => setAdvancedMode((prev) => !prev)}
+                >
+                    {advancedMode ? 'Ocultar visión avanzada' : 'Mostrar visión avanzada'}
+                </button>
+            </div>
+
+            {advancedMode && (
+                <AdvancedEventFields
+                    values={{
+                        description: form.description,
+                        uid: form.uid,
+                        status: form.status,
+                        productId: form.productId,
+                        categories: form.categories,
+                        notes: form.notes
+                    }}
+                    onChange={(name, value) => updateField(name, value)}
+                />
+            )}
+
+            {submitError ? <p className="error-text">{submitError}</p> : null}
+
+            <div className="event-form-actions">
+                <button type="button" className="button-secondary" onClick={onCerrar}>
+                    Cancelar
+                </button>
+
+                <button type="submit" className="button-primary">
+                    Generar vista previa ICS
+                </button>
+            </div>
+        </form>
+    )
+}// src/components/IcsPreview.jsx
+
+import React, { useState } from 'react'
+import { createDraftSummary } from '../services/eventDraftService'
+import { tryFormatHumanDateTime } from '../utils/dateTime'
+
+export default function IcsPreview({
+    icsContent,
+    draft,
+    isEditing,
+    isSubmitting,
+    onBackToEdit,
+    onConfirm,
+    onCancel
+}) {
+    const summary = createDraftSummary(draft || {})
+    const [copyMessage, setCopyMessage] = useState('')
+
+    async function handleCopy() {
+        try {
+            await navigator.clipboard.writeText(icsContent)
+            setCopyMessage('Copiado.')
+            window.setTimeout(() => setCopyMessage(''), 1500)
+        } catch (error) {
+            console.error('No se pudo copiar el ICS:', error)
+            setCopyMessage('No se pudo copiar.')
+            window.setTimeout(() => setCopyMessage(''), 1500)
+        }
+    }
+
+    return (
+        <div style={{ padding: '1.5rem' }}>
+            <div
+                style={{
+                    display: 'grid',
+                    gap: '1rem',
+                    gridTemplateColumns: 'minmax(280px, 1fr) minmax(320px, 1.3fr)'
+                }}
+            >
+                <section
+                    style={{
+                        border: '1px solid #d7deea',
+                        borderRadius: '12px',
+                        padding: '1rem',
+                        background: '#fff'
+                    }}
+                >
+                    <h4 style={{ marginTop: 0 }}>Resumen</h4>
+
+                    <p><strong>Título:</strong> {summary.title}</p>
+                    <p><strong>Inicio:</strong> {tryFormatHumanDateTime(summary.start)}</p>
+                    <p><strong>Fin:</strong> {tryFormatHumanDateTime(summary.end)}</p>
+                    <p><strong>Duración:</strong> {summary.durationMinutes} minutos</p>
+                    <p><strong>Lugar:</strong> {summary.location}</p>
+                    <p><strong>Zona horaria:</strong> {summary.timeZone}</p>
+
+                    {draft?.description ? (
+                        <p><strong>Descripción:</strong> {draft.description}</p>
+                    ) : null}
+                </section>
+
+                <section
+                    style={{
+                        border: '1px solid #d7deea',
+                        borderRadius: '12px',
+                        padding: '1rem',
+                        background: '#0f172a',
+                        color: '#e2e8f0'
+                    }}
+                >
+                    <div
+                        style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '1rem',
+                            marginBottom: '0.75rem'
+                        }}
+                    >
+                        <h4 style={{ margin: 0, color: '#fff' }}>Contenido del .ics</h4>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            {copyMessage ? (
+                                <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
+                                    {copyMessage}
+                                </span>
+                            ) : null}
+
+                            <button
+                                type="button"
+                                className="button-secondary"
+                                onClick={handleCopy}
+                            >
+                                Copiar
+                            </button>
+                        </div>
+                    </div>
+
+                    <pre
+                        style={{
+                            margin: 0,
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                            fontSize: '0.92rem',
+                            lineHeight: 1.6,
+                            fontFamily:
+                                'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+                        }}
+                    >
+                        {icsContent}
+                    </pre>
+                </section>
+            </div>
+
+            <div
+                style={{
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: '0.75rem',
+                    marginTop: '1.5rem',
+                    flexWrap: 'wrap'
+                }}
+            >
+                <button type="button" className="button-secondary" onClick={onCancel}>
+                    Cancelar
+                </button>
+
+                <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={onBackToEdit}
+                >
+                    Volver a editar
+                </button>
+
+                <button
+                    type="button"
+                    className="button-primary"
+                    onClick={onConfirm}
+                    disabled={isSubmitting}
+                >
+                    {isSubmitting
+                        ? 'Guardando...'
+                        : isEditing
+                            ? 'Confirmar actualización'
+                            : 'Confirmar creación'}
+                </button>
+            </div>
+        </div>
+    )
+}// src/components/AiEventComposer.jsx
+
+import React, { useMemo, useState } from 'react'
+import TimezoneField from './TimezoneField'
+import { requestAiEventStep } from '../services/aiEventService'
+import { buildSimpleDraftFromAiPayload } from '../services/eventDraftService'
+import {
+    getAiDraftTimezone,
+    saveAiDraftTimezone,
+    saveTimezonePreference
+} from '../services/timezoneService'
+
+export default function AiEventComposer({ onCerrar, onGeneratePreview }) {
+    const initialTimezone = useMemo(() => getAiDraftTimezone(), [])
+    const [timeZone, setTimeZone] = useState(initialTimezone)
+    const [message, setMessage] = useState('')
+    const [conversation, setConversation] = useState([])
+    const [assistantMessage, setAssistantMessage] = useState(
+        'Describe el evento con la mayor cantidad de detalles posibles.'
+    )
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState('')
+
+    function handleTimezoneChange(nextTimezone) {
+        setTimeZone(nextTimezone)
+        saveAiDraftTimezone(nextTimezone)
+        saveTimezonePreference(nextTimezone)
+    }
+
+    async function handleSubmit(e) {
+        e.preventDefault()
+
+        const trimmed = message.trim()
+        if (!trimmed) return
+
+        setLoading(true)
+        setError('')
+
+        const nextConversation = [
+            ...conversation,
+            { role: 'user', content: trimmed }
+        ]
+
+        try {
+            const result = await requestAiEventStep({
+                message: trimmed,
+                timeZone,
+                conversation
+            })
+
+            const resolvedAssistantMessage =
+                result.assistantMessage ||
+                (result.status === 'ready'
+                    ? 'Ya tengo toda la información para generar el evento.'
+                    : 'Necesito un poco más de información.')
+
+            const updatedConversation = [
+                ...nextConversation,
+                {
+                    role: 'assistant',
+                    content: resolvedAssistantMessage
+                }
+            ]
+
+            setConversation(updatedConversation)
+            setAssistantMessage(resolvedAssistantMessage)
+            setMessage('')
+
+            if (result.status === 'ready' && result.draft) {
+                const draft = buildSimpleDraftFromAiPayload({
+                    ...result.draft,
+                    timeZone: result.draft.timeZone || timeZone
+                })
+
+                onGeneratePreview(draft)
+            }
+        } catch (err) {
+            console.error(err)
+            setError(err.message || 'No se pudo procesar el mensaje con IA.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <div style={{ padding: '1.5rem' }}>
+            <div style={{ marginBottom: '1rem' }}>
+                <TimezoneField value={timeZone} onChange={handleTimezoneChange} />
+            </div>
+
+            <div
+                style={{
+                    border: '1px solid #d7deea',
+                    borderRadius: '12px',
+                    padding: '1rem',
+                    background: '#f8fafc',
+                    marginBottom: '1rem'
+                }}
+            >
+                <strong>Asistente:</strong>
+                <p style={{ marginBottom: 0, marginTop: '0.5rem', color: '#334155' }}>
+                    {assistantMessage}
+                </p>
+            </div>
+
+            {conversation.length > 0 && (
+                <div
+                    style={{
+                        border: '1px solid #d7deea',
+                        borderRadius: '12px',
+                        background: '#fff',
+                        padding: '1rem',
+                        marginBottom: '1rem',
+                        maxHeight: '280px',
+                        overflow: 'auto'
+                    }}
+                >
+                    {conversation.map((item, index) => (
+                        <div
+                            key={`${item.role}-${index}`}
+                            style={{
+                                marginBottom: '0.9rem',
+                                paddingBottom: '0.9rem',
+                                borderBottom:
+                                    index === conversation.length - 1
+                                        ? 'none'
+                                        : '1px solid #eef2f7'
+                            }}
+                        >
+                            <strong>
+                                {item.role === 'user' ? 'Tú' : 'Asistente'}
+                            </strong>
+                            <p style={{ margin: '0.35rem 0 0', whiteSpace: 'pre-wrap' }}>
+                                {item.content}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            <form onSubmit={handleSubmit}>
+                <label htmlFor="ai-event-message">Mensaje</label>
+                <textarea
+                    id="ai-event-message"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    rows={5}
+                    placeholder="Ej: El jueves 10 de abril a las 19:30 quiero jugar Baldur's Gate 3 con Dani durante 90 minutos por Steam."
+                />
+
+                {error ? (
+                    <p className="error-text" style={{ marginBottom: 0 }}>
+                        {error}
+                    </p>
+                ) : null}
+
+                <div
+                    style={{
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                        gap: '0.75rem',
+                        marginTop: '1rem',
+                        flexWrap: 'wrap'
+                    }}
+                >
+                    <button
+                        type="button"
+                        className="button-secondary"
+                        onClick={onCerrar}
+                    >
+                        Cancelar
+                    </button>
+
+                    <button
+                        type="submit"
+                        className="button-primary"
+                        disabled={loading}
+                    >
+                        {loading ? 'Procesando...' : 'Enviar'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    )
+}// src/main.jsx
+
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+    <React.StrictMode>
+        <App />
+    </React.StrictMode>
+)// src/App.jsx
+
+import React from 'react'
+import {
+    BrowserRouter as Router,
+    Routes,
+    Route,
+    Navigate
+} from 'react-router-dom'
+
+import AuthGate from './components/AuthGate'
+import Home from './pages/Home'
+import Calendario from './pages/Calendario'
+import ImportExport from './pages/ImportExport'
+
+export default function App() {
+    return (
+        <AuthGate>
+            <Router>
+                <Routes>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/calendario" element={<Calendario />} />
+                    <Route path="/import-export" element={<ImportExport />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+            </Router>
+        </AuthGate>
+    )
+}// src/pages/ImportExport.jsx
+
+import React, { useMemo, useState } from 'react'
+import * as calendarService from '../services/calendarService'
+import { validateIcsContent } from '../services/icsService'
+import '../styles/importexport.css'
+
+export default function ImportExport() {
+    const [icsInput, setIcsInput] = useState('')
+    const [errorParseo, setErrorParseo] = useState(null)
+    const [resultado, setResultado] = useState(null)
+    const [importando, setImportando] = useState(false)
+
+    const validation = useMemo(() => {
+        if (!icsInput.trim()) {
+            return null
+        }
+
+        return validateIcsContent(icsInput)
+    }, [icsInput])
+
+    async function handleImportar() {
+        setErrorParseo(null)
+        setResultado(null)
+
+        if (!icsInput.trim()) {
+            setErrorParseo('Debes pegar contenido ICS antes de importar.')
+            return
+        }
+
+        const check = validateIcsContent(icsInput)
+        if (!check.ok) {
+            setErrorParseo(check.error)
+            return
+        }
+
+        setImportando(true)
+
+        try {
+            const response = await calendarService.importIcs(icsInput)
+            setResultado({
+                ok: true,
+                message: response?.message || 'Archivo ICS importado correctamente.'
+            })
+        } catch (err) {
+            console.error(err)
+            setResultado(null)
+            setErrorParseo(err.message || 'No se pudo importar el archivo ICS.')
+        } finally {
+            setImportando(false)
+        }
+    }
+
+    async function handleExportarTodos() {
+        try {
+            await calendarService.downloadAllEventosIcs()
+        } catch (err) {
+            console.error(err)
+            setErrorParseo(err.message || 'No se pudo exportar el calendario.')
+        }
+    }
+
+    return (
+        <div className="importexport-container">
+            <header className="importexport-header">
+                <div>
+                    <h2 className="importexport-title">Importar / Exportar eventos ICS</h2>
+                    <p className="importexport-subtitle">
+                        El formato principal de la app ahora es .ics.
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    className="importexport-secondary-button"
+                    onClick={handleExportarTodos}
+                >
+                    Exportar todos los eventos
+                </button>
+            </header>
+
+            <section className="importexport-panel">
+                <label className="importexport-label" htmlFor="ics-input">
+                    Pega aquí el contenido del archivo .ics
+                </label>
+
+                <textarea
+                    id="ics-input"
+                    className="importexport-textarea"
+                    placeholder="BEGIN:VCALENDAR..."
+                    value={icsInput}
+                    onChange={(e) => setIcsInput(e.target.value)}
+                    spellCheck={false}
+                />
+
+                {validation && (
+                    <div
+                        className={
+                            validation.ok
+                                ? 'importexport-validation importexport-validation-ok'
+                                : 'importexport-validation importexport-validation-error'
+                        }
+                    >
+                        {validation.ok
+                            ? 'El contenido ICS parece válido.'
+                            : `Problema detectado: ${validation.error}`}
+                    </div>
+                )}
+
+                {errorParseo && <p className="error-text">{errorParseo}</p>}
+
+                <div className="importexport-actions">
+                    <button
+                        type="button"
+                        className="importexport-button"
+                        disabled={importando}
+                        onClick={handleImportar}
+                    >
+                        {importando ? 'Importando...' : 'Importar ICS'}
+                    </button>
+                </div>
+
+                {resultado && (
+                    <div className="importexport-result">
+                        <strong>Resultado:</strong>
+                        <p>{resultado.message}</p>
+                    </div>
+                )}
+            </section>
+        </div>
+    )
+}// src/pages/Calendario.jsx
+
+import React, { useEffect, useMemo, useState } from 'react'
+import CalendarList from '../components/CalendarList'
+import EventForm from '../components/EventForm'
+import IcsPreview from '../components/IcsPreview'
+import AiEventComposer from '../components/AiEventComposer'
+import * as calendarService from '../services/calendarService'
+import {
+    createIcsFromDraft,
+    buildDraftFromExistingEvent
+} from '../services/icsService'
+import '../styles/calendario.css'
+
+const CREATION_MODES = {
+    MANUAL: 'manual',
+    AI: 'ai'
+}
+
+export default function Calendario() {
+    const [eventos, setEventos] = useState([])
+    const [cargando, setCargando] = useState(true)
+    const [error, setError] = useState(null)
+
+    const [mostrarModal, setMostrarModal] = useState(false)
+    const [creationMode, setCreationMode] = useState(CREATION_MODES.MANUAL)
+
+    const [eventoEditar, setEventoEditar] = useState(null)
+    const [previewReadOnly, setPreviewReadOnly] = useState(false)
+    const [draftActual, setDraftActual] = useState(null)
+    const [icsPreview, setIcsPreview] = useState('')
+    const [confirmando, setConfirmando] = useState(false)
+
+    useEffect(() => {
+        loadEventos()
+    }, [])
+
+    async function loadEventos() {
+        setCargando(true)
+
+        try {
+            const data = await calendarService.getEventos()
+            setEventos(Array.isArray(data) ? data : [])
+            setError(null)
+        } catch (err) {
+            console.error(err)
+            setError('No se pudieron cargar los eventos.')
+        } finally {
+            setCargando(false)
+        }
+    }
+
+    function resetModalState() {
+        setCreationMode(CREATION_MODES.MANUAL)
+        setEventoEditar(null)
+        setPreviewReadOnly(false)
+        setDraftActual(null)
+        setIcsPreview('')
+        setConfirmando(false)
+    }
+
+    function abrirCrearManual() {
+        resetModalState()
+        setCreationMode(CREATION_MODES.MANUAL)
+        setMostrarModal(true)
+    }
+
+    function abrirCrearIA() {
+        resetModalState()
+        setCreationMode(CREATION_MODES.AI)
+        setMostrarModal(true)
+    }
+
+    function abrirEdicion(evento) {
+        resetModalState()
+        setCreationMode(CREATION_MODES.MANUAL)
+        setEventoEditar(evento)
+        setMostrarModal(true)
+    }
+
+    function cerrarModal() {
+        setMostrarModal(false)
+        resetModalState()
+    }
+
+    function handleGeneratePreview(draft) {
+        try {
+            const ics = createIcsFromDraft(draft)
+            setDraftActual(draft)
+            setIcsPreview(ics)
+            setError(null)
+        } catch (err) {
+            console.error(err)
+            setError(err.message || 'No se pudo generar la vista previa ICS.')
+        }
+    }
+
+    async function handleConfirmarPreview() {
+        if (!draftActual || !icsPreview || previewReadOnly) return
+
+        setConfirmando(true)
+
+        try {
+            let resultado
+
+            if (eventoEditar?.id) {
+                resultado = await calendarService.updateEventoFromDraft(
+                    eventoEditar.id,
+                    draftActual,
+                    icsPreview
+                )
+
+                setEventos((prev) =>
+                    prev.map((ev) => (ev.id === resultado.id ? resultado : ev))
+                )
+            } else {
+                resultado = await calendarService.createEventoFromDraft(
+                    draftActual,
+                    icsPreview
+                )
+
+                setEventos((prev) => [resultado, ...prev])
+            }
+
+            cerrarModal()
+        } catch (err) {
+            console.error(err)
+            setError(err.message || 'No se pudo guardar el evento.')
+        } finally {
+            setConfirmando(false)
+        }
+    }
+
+    async function handleEliminar(id) {
+        try {
+            await calendarService.deleteEvento(id)
+            setEventos((prev) => prev.filter((ev) => ev.id !== id))
+            setError(null)
+        } catch (err) {
+            console.error(err)
+            setError(err.message || 'No se pudo eliminar el evento.')
+        }
+    }
+
+    function handleVerIcs(evento) {
+        try {
+            const draft = buildDraftFromExistingEvent(evento)
+            const ics = createIcsFromDraft(draft)
+
+            setEventoEditar(evento)
+            setDraftActual(draft)
+            setIcsPreview(ics)
+            setPreviewReadOnly(true)
+            setCreationMode(CREATION_MODES.MANUAL)
+            setMostrarModal(true)
+        } catch (err) {
+            console.error(err)
+            setError(err.message || 'No se pudo construir la vista previa del ICS.')
+        }
+    }
+
+    function handleBackFromPreview() {
+        if (previewReadOnly) {
+            cerrarModal()
+            return
+        }
+
+        setIcsPreview('')
+    }
+
+    const modalTitle = useMemo(() => {
+        if (icsPreview) {
+            if (previewReadOnly) {
+                return 'Vista previa del ICS'
+            }
+
+            return eventoEditar ? 'Vista previa ICS de edición' : 'Vista previa ICS'
+        }
+
+        if (creationMode === CREATION_MODES.AI) {
+            return 'Crear evento con IA'
+        }
+
+        return eventoEditar ? 'Editar evento' : 'Crear evento manual'
+    }, [creationMode, eventoEditar, icsPreview, previewReadOnly])
+
+    return (
+        <div className="calendario-container">
+            <header className="calendario-header">
+                <div>
+                    <h2 className="calendario-title">Agenda de eventos</h2>
+                    <p className="calendario-subtitle">
+                        Todos los eventos se revisan primero como archivo .ics antes de confirmar.
+                    </p>
+                </div>
+
+                <div className="calendario-actions">
+                    <button type="button" onClick={abrirCrearManual}>
+                        Nuevo evento manual
+                    </button>
+                    <button
+                        type="button"
+                        className="calendario-secondary-button"
+                        onClick={abrirCrearIA}
+                    >
+                        Crear con IA
+                    </button>
+                </div>
+            </header>
+
+            {cargando && <p className="calendario-loading">Cargando eventos...</p>}
+            {error && <p className="calendario-error">{error}</p>}
+
+            {!cargando && (
+                <div className="calendario-list">
+                    <CalendarList
+                        eventos={eventos}
+                        onEditar={abrirEdicion}
+                        onEliminar={handleEliminar}
+                        onVerIcs={handleVerIcs}
+                    />
+                </div>
+            )}
+
+            {mostrarModal && (
+                <div className="modal-overlay">
+                    <div className="modal-content modal-content-wide">
+                        <div className="modal-header">
+                            <h3 className="modal-title">{modalTitle}</h3>
+                            <button
+                                className="modal-close-btn"
+                                onClick={cerrarModal}
+                                aria-label="Cerrar modal"
+                                type="button"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        {!icsPreview && creationMode === CREATION_MODES.MANUAL && (
+                            <EventForm
+                                evento={eventoEditar}
+                                onCerrar={cerrarModal}
+                                onGeneratePreview={handleGeneratePreview}
+                            />
+                        )}
+
+                        {!icsPreview && creationMode === CREATION_MODES.AI && (
+                            <AiEventComposer
+                                onCerrar={cerrarModal}
+                                onGeneratePreview={handleGeneratePreview}
+                            />
+                        )}
+
+                        {icsPreview && (
+                            <IcsPreview
+                                icsContent={icsPreview}
+                                draft={draftActual}
+                                isEditing={Boolean(eventoEditar) && !previewReadOnly}
+                                isSubmitting={confirmando}
+                                onBackToEdit={handleBackFromPreview}
+                                onConfirm={handleConfirmarPreview}
+                                onCancel={cerrarModal}
+                            />
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}// src/pages/Home.jsx
+
+import { Link } from 'react-router-dom'
+import '../styles/home.css'
+
+export default function Home() {
+    return (
+        <div className="home-container">
+            <div className="home-hero">
+                <h1 className="home-title">Calendario ICS</h1>
+                <h2 className="home-subtitle">
+                    Crea, revisa y confirma eventos a partir de archivos .ics antes de guardarlos.
+                </h2>
+            </div>
+
+            <div className="home-options">
+                <Link to="/calendario" className="home-option">
+                    <span className="home-option-title">Crear y gestionar eventos</span>
+                    <span className="home-option-text">
+                        Modo manual, modo avanzado y creación asistida por IA con vista previa ICS.
+                    </span>
+                </Link>
+
+                <Link to="/import-export" className="home-option">
+                    <span className="home-option-title">Importar / exportar .ics</span>
+                    <span className="home-option-text">
+                        Pega, valida, revisa y confirma contenido ICS.
+                    </span>
+                </Link>
+            </div>
+
+            <div className="home-info-card">
+                <h3 className="home-info-title">Cómo funciona ahora</h3>
+                <p className="home-info-text">
+                    Todo evento pasa primero por una vista previa del archivo ICS. Solo después de tu
+                    confirmación se crea o actualiza.
+                </p>
+            </div>
+
+            <footer className="home-footer">
+                © 2026 Santiago Haspert. Prototipo de uso personal.
+            </footer>
+        </div>
+    )
+}// src/services/icsService.js
+
+import { formatIcsDateTimeLocal, formatIcsUtcStamp } from '../utils/dateTime'
+import { buildIcsLines, escapeIcsText, sanitizeUidPart } from '../utils/icsText'
+
+const DEFAULT_PRODUCT_ID = '-//Santiago Haspert Piaggio//Calendar ICS//EN'
+
+export function createIcsFromDraft(draft) {
+    validateDraftForIcs(draft)
+
+    const uid = buildUid(draft)
+    const dtStamp = formatIcsUtcStamp(new Date())
+    const dtStart = formatIcsDateTimeLocal(draft.startDateTime)
+    const dtEnd = formatIcsDateTimeLocal(draft.endDateTime)
+    const productId = draft.productId || DEFAULT_PRODUCT_ID
+
+    const descriptionParts = []
+
+    if (draft.description) {
+        descriptionParts.push(draft.description)
+    }
+
+    if (draft.durationMinutes) {
+        descriptionParts.push(`Duration: ${draft.durationMinutes} minutes.`)
+    }
+
+    if (draft.notes) {
+        descriptionParts.push(`Notes: ${draft.notes}`)
+    }
+
+    const description = descriptionParts.join('\n')
+
+    const lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        `PRODID:${escapeIcsText(productId)}`,
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'BEGIN:VEVENT',
+        `UID:${escapeIcsText(uid)}`,
+        `DTSTAMP:${dtStamp}`,
+        `DTSTART;TZID=${escapeIcsText(draft.timeZone)}:${dtStart}`,
+        `DTEND;TZID=${escapeIcsText(draft.timeZone)}:${dtEnd}`,
+        `SUMMARY:${escapeIcsText(draft.summary)}`,
+        draft.location ? `LOCATION:${escapeIcsText(draft.location)}` : '',
+        description ? `DESCRIPTION:${escapeIcsText(description)}` : '',
+        draft.status ? `STATUS:${escapeIcsText(draft.status)}` : '',
+        draft.categories?.length
+            ? `CATEGORIES:${escapeIcsText(draft.categories.join(','))}`
+            : '',
+        'END:VEVENT',
+        'END:VCALENDAR'
+    ]
+
+    return `${buildIcsLines(lines)}\r\n`
+}
+
+export function validateDraftForIcs(draft) {
+    if (!draft || typeof draft !== 'object') {
+        throw new Error('No se pudo generar el ICS: draft inválido.')
+    }
+
+    if (!String(draft.summary || '').trim()) {
+        throw new Error('El evento debe tener nombre.')
+    }
+
+    if (!String(draft.startDateTime || '').trim()) {
+        throw new Error('El evento debe tener fecha y hora de inicio.')
+    }
+
+    if (!String(draft.endDateTime || '').trim()) {
+        throw new Error('El evento debe tener fecha y hora de fin.')
+    }
+
+    if (!String(draft.timeZone || '').trim()) {
+        throw new Error('El evento debe tener zona horaria.')
+    }
+
+    const start = new Date(draft.startDateTime)
+    const end = new Date(draft.endDateTime)
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        throw new Error('Las fechas del evento no son válidas.')
+    }
+
+    if (end.getTime() <= start.getTime()) {
+        throw new Error('La fecha de fin debe ser posterior a la de inicio.')
+    }
+
+    if (!Number.isFinite(Number(draft.durationMinutes)) || Number(draft.durationMinutes) <= 0) {
+        throw new Error('La duración del evento debe ser válida.')
+    }
+}
+
+export function validateIcsContent(icsContent) {
+    const content = String(icsContent || '').trim()
+
+    if (!content) {
+        return {
+            ok: false,
+            error: 'El contenido ICS está vacío.'
+        }
+    }
+
+    const requiredParts = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'BEGIN:VEVENT',
+        'UID:',
+        'DTSTAMP:',
+        'DTSTART',
+        'DTEND',
+        'SUMMARY:',
+        'END:VEVENT',
+        'END:VCALENDAR'
+    ]
+
+    const missing = requiredParts.filter((part) => !content.includes(part))
+
+    if (missing.length > 0) {
+        return {
+            ok: false,
+            error: `Faltan partes obligatorias del ICS: ${missing.join(', ')}`
+        }
+    }
+
+    return { ok: true }
+}
+
+export function buildDraftFromExistingEvent(evento) {
+    const startValue = evento?.start?.dateTime || evento?.start?.date || evento?.start || ''
+    const endValue = evento?.end?.dateTime || evento?.end?.date || evento?.end || ''
+
+    return {
+        summary: String(evento?.summary || '').trim(),
+        description: String(evento?.description || '').trim(),
+        location: String(evento?.location || '').trim(),
+        startDateTime: normalizeEventDateValue(startValue),
+        endDateTime: normalizeEventDateValue(endValue),
+        durationMinutes: getDurationMinutes(startValue, endValue),
+        timeZone:
+            String(
+                evento?.timeZone ||
+                    evento?.start?.timeZone ||
+                    evento?.end?.timeZone ||
+                    'Europe/Dublin'
+            ).trim() || 'Europe/Dublin',
+        uid: String(evento?.uid || '').trim(),
+        status: String(evento?.status || 'CONFIRMED').trim(),
+        productId: String(evento?.productId || DEFAULT_PRODUCT_ID).trim(),
+        categories: Array.isArray(evento?.categories) ? evento.categories : [],
+        notes: String(evento?.notes || '').trim()
+    }
+}
+
+function buildUid(draft) {
+    if (draft.uid) {
+        return draft.uid
+    }
+
+    const summaryPart = sanitizeUidPart(draft.summary)
+    const locationPart = sanitizeUidPart(draft.location || 'calendar')
+    const datePart = formatIcsDateTimeLocal(draft.startDateTime)
+
+    return `${summaryPart}-${locationPart}-${datePart}@calendar.local`
+}
+
+function normalizeEventDateValue(value) {
+    const date = new Date(value)
+
+    if (Number.isNaN(date.getTime())) {
+        return ''
+    }
+
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+
+    return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+function getDurationMinutes(startValue, endValue) {
+    const start = new Date(startValue)
+    const end = new Date(endValue)
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return 60
+    }
+
+    const diff = Math.round((end.getTime() - start.getTime()) / 60000)
+    return diff > 0 ? diff : 60
+}// src/services/eventDraftService.js
+
+import {
+    addMinutesToLocalDateTime,
+    combineDateAndTime,
+    formatDateForInput,
+    formatTimeForInput,
+    toLocalDateTimeString
+} from '../utils/dateTime'
+
+const DEFAULT_PRODUCT_ID = '-//Santiago Haspert Piaggio//Calendar ICS//EN'
+
+export function getDefaultDateInputValue() {
+    return formatDateForInput(new Date())
+}
+
+export function getDefaultTimeInputValue() {
+    const now = new Date()
+    now.setMinutes(0, 0, 0)
+    now.setHours(now.getHours() + 1)
+
+    return formatTimeForInput(now)
+}
+
+export function createInitialDraftState({
+    timeZone,
+    defaultDate,
+    defaultStartTime,
+    defaultDurationMinutes
+}) {
+    return {
+        summary: '',
+        date: defaultDate || getDefaultDateInputValue(),
+        time: defaultStartTime || getDefaultTimeInputValue(),
+        durationMinutes: String(defaultDurationMinutes || 60),
+        location: '',
+        timeZone,
+        description: '',
+        uid: '',
+        status: 'CONFIRMED',
+        productId: DEFAULT_PRODUCT_ID,
+        categories: '',
+        notes: ''
+    }
+}
+
+export function createDraftFromEvent(evento, fallbackTimeZone) {
+    const startValue = extractEventStart(evento)
+    const endValue = extractEventEnd(evento)
+
+    const startDate = parseDateSafely(startValue)
+
+    const safeDate =
+        startDate && !Number.isNaN(startDate.getTime())
+            ? formatDateForInput(startDate)
+            : getDefaultDateInputValue()
+
+    const safeTime =
+        startDate && !Number.isNaN(startDate.getTime())
+            ? formatTimeForInput(startDate)
+            : getDefaultTimeInputValue()
+
+    const durationMinutes = getDurationMinutesFromValues(startValue, endValue)
+
+    return {
+        summary: String(evento?.summary || '').trim(),
+        date: safeDate,
+        time: safeTime,
+        durationMinutes: String(durationMinutes || 60),
+        location: String(evento?.location || '').trim(),
+        timeZone:
+            String(
+                evento?.timeZone ||
+                    evento?.start?.timeZone ||
+                    evento?.end?.timeZone ||
+                    fallbackTimeZone
+            ).trim() || fallbackTimeZone,
+        description: String(evento?.description || '').trim(),
+        uid: String(evento?.uid || '').trim(),
+        status: String(evento?.status || 'CONFIRMED').trim(),
+        productId: String(evento?.productId || DEFAULT_PRODUCT_ID).trim(),
+        categories: Array.isArray(evento?.categories)
+            ? evento.categories.join(', ')
+            : String(evento?.categories || '').trim(),
+        notes: String(evento?.notes || '').trim()
+    }
+}
+
+export function combineDateAndTimeToLocalDateTime(dateValue, timeValue) {
+    return combineDateAndTime(dateValue, timeValue)
+}
+
+export function buildDraftFromFormState(formState) {
+    const startDateTime =
+        formState.startDateTime ||
+        combineDateAndTime(formState.date, formState.time)
+
+    const durationMinutes = Number(formState.durationMinutes || 0)
+
+    if (!startDateTime) {
+        throw new Error('Debes indicar fecha y hora de inicio.')
+    }
+
+    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+        throw new Error('La duración debe ser mayor que cero.')
+    }
+
+    const endDateTime = addMinutesToLocalDateTime(startDateTime, durationMinutes)
+
+    return normalizeDraft({
+        summary: formState.summary,
+        description: formState.description,
+        location: formState.location,
+        startDateTime,
+        endDateTime,
+        durationMinutes,
+        timeZone: formState.timeZone,
+        uid: formState.uid,
+        status: formState.status || 'CONFIRMED',
+        productId: formState.productId || DEFAULT_PRODUCT_ID,
+        categories: splitCommaValues(formState.categories),
+        notes: formState.notes
+    })
+}
+
+export function buildSimpleDraftFromAiPayload(payload) {
+    const startDateTime = String(payload?.startDateTime || '').trim()
+    const durationMinutes = Number(payload?.durationMinutes || 0)
+
+    if (!startDateTime) {
+        throw new Error('La IA no devolvió una fecha de inicio válida.')
+    }
+
+    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+        throw new Error('La IA no devolvió una duración válida.')
+    }
+
+    const endDateTime =
+        String(payload?.endDateTime || '').trim() ||
+        addMinutesToLocalDateTime(startDateTime, durationMinutes)
+
+    return normalizeDraft({
+        summary: payload?.summary,
+        description: payload?.description,
+        location: payload?.location,
+        startDateTime,
+        endDateTime,
+        durationMinutes,
+        timeZone: payload?.timeZone,
+        uid: payload?.uid,
+        status: payload?.status || 'CONFIRMED',
+        productId: payload?.productId || DEFAULT_PRODUCT_ID,
+        categories: splitCommaValues(payload?.categories),
+        notes: payload?.notes
+    })
+}
+
+export function createDraftSummary(draft) {
+    return {
+        title: draft?.summary || 'Sin título',
+        start: draft?.startDateTime
+            ? toLocalDateTimeString(new Date(draft.startDateTime))
+            : '',
+        end: draft?.endDateTime
+            ? toLocalDateTimeString(new Date(draft.endDateTime))
+            : '',
+        location: draft?.location || '-',
+        timeZone: draft?.timeZone || '-',
+        durationMinutes: draft?.durationMinutes || 0
+    }
+}
+
+export function normalizeDraft(draft) {
+    return {
+        summary: String(draft?.summary || '').trim(),
+        description: String(draft?.description || '').trim(),
+        location: String(draft?.location || '').trim(),
+        startDateTime: String(draft?.startDateTime || '').trim(),
+        endDateTime: String(draft?.endDateTime || '').trim(),
+        durationMinutes: Number(draft?.durationMinutes || 0),
+        timeZone: String(draft?.timeZone || '').trim(),
+        uid: String(draft?.uid || '').trim(),
+        status: String(draft?.status || 'CONFIRMED').trim(),
+        productId: String(draft?.productId || DEFAULT_PRODUCT_ID).trim(),
+        categories: splitCommaValues(draft?.categories),
+        notes: String(draft?.notes || '').trim()
+    }
+}
+
+function splitCommaValues(value) {
+    if (!value) return []
+
+    if (Array.isArray(value)) {
+        return value
+            .map((item) => String(item).trim())
+            .filter(Boolean)
+    }
+
+    return String(value)
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+}
+
+function extractEventStart(evento) {
+    return evento?.start?.dateTime || evento?.start?.date || evento?.start || ''
+}
+
+function extractEventEnd(evento) {
+    return evento?.end?.dateTime || evento?.end?.date || evento?.end || ''
+}
+
+function parseDateSafely(value) {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date
+}
+
+function getDurationMinutesFromValues(startValue, endValue) {
+    const start = parseDateSafely(startValue)
+    const end = parseDateSafely(endValue)
+
+    if (!start || !end) {
+        return 60
+    }
+
+    const diff = Math.round((end.getTime() - start.getTime()) / 60000)
+    return diff > 0 ? diff : 60
+}// src/services/aiEventService.js
+
+export async function requestAiEventStep({ message, timeZone, conversation }) {
+    const res = await fetch('/api/ai/event-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            message,
+            timeZone,
+            conversation
+        })
+    })
+
+    if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText)
+        throw new Error(`Error ${res.status}: ${text}`)
+    }
+
+    const json = await res.json()
+
+    if (!json || typeof json !== 'object') {
+        throw new Error('La respuesta del backend de IA no fue válida.')
+    }
+
+    if (!json.status || !['needs_more_info', 'ready'].includes(json.status)) {
+        throw new Error('La respuesta del backend de IA no tiene un status válido.')
+    }
+
+    return json
+}// src/services/timezoneService.js
+
+import {
+    DEFAULT_TIMEZONE,
+    MANUAL_TIMEZONE_OPTION,
+    POPULAR_TIMEZONES
+} from '../constants/timezones'
+import { STORAGE_KEYS } from '../constants/storageKeys'
+
+export function getPopularTimezones() {
+    return POPULAR_TIMEZONES
+}
+
+export function isPopularTimezone(timezone) {
+    return POPULAR_TIMEZONES.some((item) => item.value === timezone)
+}
+
+export function getSavedTimezone() {
+    try {
+        const stored = window.localStorage.getItem(STORAGE_KEYS.TIMEZONE_PREFERENCE)
+
+        if (stored && typeof stored === 'string') {
+            return stored
+        }
+    } catch (error) {
+        console.error('No se pudo leer la zona horaria guardada:', error)
+    }
+
+    return DEFAULT_TIMEZONE
+}
+
+export function saveTimezonePreference(timezone) {
+    if (!timezone || typeof timezone !== 'string') {
+        return
+    }
+
+    try {
+        window.localStorage.setItem(STORAGE_KEYS.TIMEZONE_PREFERENCE, timezone)
+    } catch (error) {
+        console.error('No se pudo guardar la zona horaria:', error)
+    }
+}
+
+export function getTimezoneSelectValue(timezone) {
+    if (isPopularTimezone(timezone)) {
+        return timezone
+    }
+
+    return MANUAL_TIMEZONE_OPTION
+}
+
+export function getAiDraftTimezone() {
+    try {
+        return (
+            window.localStorage.getItem(STORAGE_KEYS.AI_DRAFT_TIMEZONE) ||
+            getSavedTimezone()
+        )
+    } catch (error) {
+        console.error('No se pudo leer la zona horaria temporal de IA:', error)
+        return getSavedTimezone()
+    }
+}
+
+export function saveAiDraftTimezone(timezone) {
+    if (!timezone || typeof timezone !== 'string') {
+        return
+    }
+
+    try {
+        window.localStorage.setItem(STORAGE_KEYS.AI_DRAFT_TIMEZONE, timezone)
+    } catch (error) {
+        console.error('No se pudo guardar la zona horaria temporal de IA:', error)
+    }
+}
+
+export function clearAiDraftTimezone() {
+    try {
+        window.localStorage.removeItem(STORAGE_KEYS.AI_DRAFT_TIMEZONE)
+    } catch (error) {
+        console.error('No se pudo limpiar la zona horaria temporal de IA:', error)
+    }
+}// src/services/calendarService.js
+
+const API_BASE = '/api/eventos'
+const ICS_BASE = '/api/ics'
+
+async function handleJsonResponse(res) {
+    if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText)
+        throw new Error(`Error ${res.status}: ${text}`)
+    }
+
+    const contentType = res.headers.get('content-type') || ''
+
+    if (contentType.includes('application/json')) {
+        return res.json()
+    }
+
+    return null
+}
+
+async function getEventos() {
+    const res = await fetch(API_BASE)
+    return handleJsonResponse(res)
+}
+
+async function createEventoFromDraft(draft, icsContent) {
+    const res = await fetch(API_BASE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            draft,
+            icsContent,
+            source: 'ics-preview'
+        })
+    })
+
+    return handleJsonResponse(res)
+}
+
+async function updateEventoFromDraft(id, draft, icsContent) {
+    const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            draft,
+            icsContent,
+            source: 'ics-preview'
+        })
+    })
+
+    return handleJsonResponse(res)
+}
+
+async function deleteEvento(id) {
+    const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+    })
+
+    if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText)
+        throw new Error(`Error ${res.status}: ${text}`)
+    }
+
+    return true
+}
+
+async function importIcs(icsContent) {
+    const res = await fetch(`${ICS_BASE}/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ icsContent })
+    })
+
+    return handleJsonResponse(res)
+}
+
+async function downloadAllEventosIcs() {
+    const res = await fetch(`${ICS_BASE}/export`, {
+        method: 'GET'
+    })
+
+    if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText)
+        throw new Error(`Error ${res.status}: ${text}`)
+    }
+
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'calendario.ics'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+
+    return true
+}
+
+export {
+    getEventos,
+    createEventoFromDraft,
+    updateEventoFromDraft,
+    deleteEvento,
+    importIcs,
+    downloadAllEventosIcs
+}// src/services/authService.js
+
+import { STORAGE_KEYS } from '../constants/storageKeys'
+
+export function getExpectedAuthCode() {
+    return import.meta.env.VITE_AUTH_CODE || ''
+}
+
+export function isAuthRequired() {
+    return Boolean(getExpectedAuthCode())
+}
+
+export function isAuthenticated() {
+    if (!isAuthRequired()) {
+        return true
+    }
+
+    try {
+        return window.localStorage.getItem(STORAGE_KEYS.AUTH_OK) === 'true'
+    } catch (error) {
+        console.error('No se pudo leer el estado de auth:', error)
+        return false
+    }
+}
+
+export function validateAuthCode(inputCode) {
+    const expectedCode = getExpectedAuthCode()
+
+    if (!expectedCode) {
+        return true
+    }
+
+    return String(inputCode).trim() === String(expectedCode).trim()
+}
+
+export function persistAuthenticated() {
+    try {
+        window.localStorage.setItem(STORAGE_KEYS.AUTH_OK, 'true')
+    } catch (error) {
+        console.error('No se pudo persistir la auth:', error)
+    }
+}
+
+export function clearAuthenticated() {
+    try {
+        window.localStorage.removeItem(STORAGE_KEYS.AUTH_OK)
+    } catch (error) {
+        console.error('No se pudo limpiar la auth:', error)
+    }
+}

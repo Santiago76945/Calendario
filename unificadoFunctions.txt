@@ -1,0 +1,983 @@
+// functions/ai/event-draft.cjs
+
+function jsonHeaders() {
+    return {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST,OPTIONS'
+    }
+}
+
+function parseBody(body) {
+    if (!body) return {}
+
+    try {
+        return JSON.parse(body)
+    } catch (error) {
+        throw new Error('El body JSON no es válido.')
+    }
+}
+
+function extractConversationText(conversation) {
+    if (!Array.isArray(conversation)) return ''
+
+    return conversation
+        .map((item) => `${item?.role || 'user'}: ${item?.content || ''}`)
+        .join('\n')
+}
+
+function inferLocation(text) {
+    const lower = text.toLowerCase()
+
+    if (lower.includes('steam')) return 'Online (Steam)'
+    if (lower.includes('zoom')) return 'Online (Zoom)'
+    if (lower.includes('google meet')) return 'Online (Google Meet)'
+    if (lower.includes('online')) return 'Online'
+    if (lower.includes('virtual')) return 'Virtual'
+
+    return ''
+}
+
+function inferDurationMinutes(text) {
+    const minutesMatch = text.match(/(\d+)\s*(min|mins|minutos|minutes)\b/i)
+    if (minutesMatch) {
+        return Number(minutesMatch[1])
+    }
+
+    const hoursMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(hora|horas|hour|hours|h)\b/i)
+    if (hoursMatch) {
+        const value = Number(String(hoursMatch[1]).replace(',', '.'))
+        if (Number.isFinite(value)) {
+            return Math.round(value * 60)
+        }
+    }
+
+    return null
+}
+
+function inferDateTime(text) {
+    const isoMatch = text.match(
+        /\b(20\d{2}-\d{2}-\d{2})[ t](\d{2}:\d{2})\b/
+    )
+    if (isoMatch) {
+        return `${isoMatch[1]}T${isoMatch[2]}`
+    }
+
+    const slashMatch = text.match(
+        /\b(\d{1,2})[\/.-](\d{1,2})[\/.-](20\d{2})\b.*?\b(\d{1,2}):(\d{2})\b/i
+    )
+
+    if (slashMatch) {
+        const day = String(slashMatch[1]).padStart(2, '0')
+        const month = String(slashMatch[2]).padStart(2, '0')
+        const year = slashMatch[3]
+        const hour = String(slashMatch[4]).padStart(2, '0')
+        const minute = slashMatch[5]
+
+        return `${year}-${month}-${day}T${hour}:${minute}`
+    }
+
+    return null
+}
+
+function inferSummary(text) {
+    const clean = String(text || '').trim()
+    if (!clean) return ''
+
+    const withMatch = clean.match(/(?:con|with)\s+([A-Za-zÁÉÍÓÚáéíóúÑñ0-9 _-]+)/i)
+    const person = withMatch ? withMatch[1].trim() : ''
+
+    if (/baldur/i.test(clean)) {
+        return person ? `Baldur's Gate 3 con ${person}` : `Baldur's Gate 3`
+    }
+
+    if (/dinner|cena/i.test(clean)) {
+        return person ? `Cena con ${person}` : 'Cena'
+    }
+
+    if (/meeting|reunión|reunion|llamada|call/i.test(clean)) {
+        return person ? `Reunión con ${person}` : 'Reunión'
+    }
+
+    return clean.length > 80 ? `${clean.slice(0, 77)}...` : clean
+}
+
+exports.handler = async function (event) {
+    const headers = jsonHeaders()
+
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 204,
+            headers,
+            body: ''
+        }
+    }
+
+    if (event.httpMethod !== 'POST') {
+        return {
+            statusCode: 405,
+            headers,
+            body: JSON.stringify({ error: 'Método no permitido' })
+        }
+    }
+
+    try {
+        const body = parseBody(event.body)
+        const message = String(body?.message || '').trim()
+        const timeZone = String(body?.timeZone || 'Europe/Dublin').trim()
+        const conversation = body?.conversation || []
+
+        if (!message) {
+            throw new Error('Falta el mensaje del usuario.')
+        }
+
+        const fullContext = `${extractConversationText(conversation)}\nuser: ${message}`
+        const summary = inferSummary(fullContext)
+        const startDateTime = inferDateTime(fullContext)
+        const durationMinutes = inferDurationMinutes(fullContext)
+        const location = inferLocation(fullContext)
+
+        if (!startDateTime) {
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({
+                    status: 'needs_more_info',
+                    assistantMessage:
+                        'Entiendo la idea general. ¿Qué fecha y hora exactas debería tener el evento? Puedes escribir algo como 2026-04-10 19:30.',
+                    missingFields: ['startDateTime'],
+                    draft: {
+                        summary,
+                        location,
+                        durationMinutes: durationMinutes || 60,
+                        timeZone
+                    }
+                })
+            }
+        }
+
+        if (!durationMinutes) {
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({
+                    status: 'needs_more_info',
+                    assistantMessage:
+                        'Perfecto. Ya tengo la fecha y hora. ¿Cuánto debería durar el evento en minutos u horas?',
+                    missingFields: ['durationMinutes'],
+                    draft: {
+                        summary,
+                        startDateTime,
+                        location,
+                        timeZone
+                    }
+                })
+            }
+        }
+
+        return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({
+                status: 'ready',
+                assistantMessage: 'Ya tengo la información necesaria para generar la vista previa del evento.',
+                draft: {
+                    summary: summary || 'Evento generado con IA',
+                    startDateTime,
+                    durationMinutes,
+                    location,
+                    description: '',
+                    timeZone,
+                    uid: '',
+                    status: 'CONFIRMED',
+                    productId: '-//Santiago Haspert Piaggio//Calendar ICS//EN',
+                    categories: [],
+                    notes: ''
+                }
+            })
+        }
+    } catch (err) {
+        console.error(err)
+        return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+                error: err.message || 'No se pudo generar el draft con IA.'
+            })
+        }
+    }
+}// functions/eventos-by-id.cjs
+
+const {
+    actualizarEventoDesdeDraft,
+    eliminarEvento
+} = require('./eventos/googleCalendarService.cjs')
+
+function jsonHeaders() {
+    return {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'PUT,DELETE,OPTIONS'
+    }
+}
+
+function parseBody(body) {
+    if (!body) return {}
+
+    try {
+        return JSON.parse(body)
+    } catch (error) {
+        throw new Error('El body JSON no es válido.')
+    }
+}
+
+function getIdFromPath(path) {
+    const parts = String(path || '')
+        .split('/')
+        .filter(Boolean)
+
+    return parts[parts.length - 1] || ''
+}
+
+exports.handler = async function (event) {
+    const headers = jsonHeaders()
+
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 204,
+            headers,
+            body: ''
+        }
+    }
+
+    const id = getIdFromPath(event.path)
+
+    if (!id) {
+        return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ error: 'Falta el ID del evento.' })
+        }
+    }
+
+    if (event.httpMethod === 'PUT') {
+        try {
+            const payload = parseBody(event.body)
+
+            if (!payload?.draft || typeof payload.draft !== 'object') {
+                throw new Error('Falta el draft.')
+            }
+
+            if (!String(payload.icsContent || '').trim()) {
+                throw new Error('Falta el contenido ICS.')
+            }
+
+            const actualizado = await actualizarEventoDesdeDraft(id, payload.draft)
+
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify(actualizado)
+            }
+        } catch (err) {
+            console.error(err)
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({
+                    error: err.message || 'Error al actualizar evento'
+                })
+            }
+        }
+    }
+
+    if (event.httpMethod === 'DELETE') {
+        try {
+            await eliminarEvento(id)
+
+            return {
+                statusCode: 204,
+                headers,
+                body: ''
+            }
+        } catch (err) {
+            console.error(err)
+            return {
+                statusCode: 500,
+                headers,
+                body: JSON.stringify({
+                    error: err.message || 'Error al eliminar evento'
+                })
+            }
+        }
+    }
+
+    return {
+        statusCode: 405,
+        headers,
+        body: JSON.stringify({ error: 'Método no permitido' })
+    }
+}// functions/oauth2-callback.cjs
+
+const { google } = require('googleapis')
+
+const {
+    GCAL_CLIENT_ID,
+    GCAL_CLIENT_SECRET,
+    GCAL_REDIRECT_URI
+} = process.env
+
+exports.handler = async function (event) {
+    const code = event.queryStringParameters?.code
+
+    if (!GCAL_CLIENT_ID || !GCAL_CLIENT_SECRET || !GCAL_REDIRECT_URI) {
+        return {
+            statusCode: 500,
+            body: 'Faltan variables de entorno OAuth de Google Calendar.'
+        }
+    }
+
+    if (!code) {
+        return { statusCode: 400, body: 'Missing "code" parameter' }
+    }
+
+    const oAuth2Client = new google.auth.OAuth2(
+        GCAL_CLIENT_ID,
+        GCAL_CLIENT_SECRET,
+        GCAL_REDIRECT_URI
+    )
+
+    try {
+        const { tokens } = await oAuth2Client.getToken(code)
+
+        return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'text/html; charset=utf-8' },
+            body: `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Autorización completada</title>
+</head>
+<body style="font-family: sans-serif; max-width: 760px; margin: 40px auto; line-height: 1.6;">
+  <h1>Autorización completada</h1>
+  <p>Google devolvió correctamente los tokens.</p>
+  <p><strong>Importante:</strong> por seguridad, este callback ya no guarda el refresh token en localStorage.</p>
+  <p>Copia este valor y guárdalo como variable de entorno <code>GCAL_REFRESH_TOKEN</code> en Netlify o en tu entorno local:</p>
+  <pre style="white-space: pre-wrap; word-break: break-word; background: #f5f5f5; padding: 12px; border-radius: 8px;">${tokens.refresh_token || 'Google no devolvió un refresh token nuevo. Si ya habías autorizado antes sin prompt=consent, revoca acceso y vuelve a autorizar.'}</pre>
+  <p>Una vez configurado, vuelve a abrir tu app.</p>
+  <p><a href="/calendario">Ir al calendario</a></p>
+</body>
+</html>
+`
+        }
+    } catch (err) {
+        console.error('Error exchanging code:', err)
+        return {
+            statusCode: 500,
+            body: 'Error al intercambiar el código por tokens'
+        }
+    }
+}// functions/eventos/delete.cjs
+
+const { eliminarEvento } = require('./googleCalendarService.cjs')
+
+exports.handler = async function (event) {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+    }
+
+    if (event.httpMethod !== 'DELETE') {
+        return {
+            statusCode: 405,
+            headers,
+            body: JSON.stringify({ error: 'Método no permitido' })
+        }
+    }
+
+    const parts = event.path.split('/')
+    const id = parts[parts.length - 1]
+
+    try {
+        await eliminarEvento(id)
+        return {
+            statusCode: 204,
+            headers,
+            body: ''
+        }
+    } catch (err) {
+        console.error(err)
+        return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ error: 'Error al eliminar evento' })
+        }
+    }
+}
+// functions/eventos/googleCalendarService.cjs
+
+const { google } = require('googleapis')
+
+const {
+    GCAL_CLIENT_ID,
+    GCAL_CLIENT_SECRET,
+    GCAL_REDIRECT_URI,
+    GCAL_REFRESH_TOKEN,
+    CALENDAR_ID = 'primary',
+    TIMEZONE = 'Europe/Dublin'
+} = process.env
+
+const oAuth2Client = new google.auth.OAuth2(
+    GCAL_CLIENT_ID,
+    GCAL_CLIENT_SECRET,
+    GCAL_REDIRECT_URI
+)
+
+if (GCAL_REFRESH_TOKEN) {
+    oAuth2Client.setCredentials({ refresh_token: GCAL_REFRESH_TOKEN })
+}
+
+const calendar = google.calendar({ version: 'v3', auth: oAuth2Client })
+
+function ensureGoogleAuthConfigured() {
+    if (!GCAL_CLIENT_ID || !GCAL_CLIENT_SECRET || !GCAL_REDIRECT_URI || !GCAL_REFRESH_TOKEN) {
+        throw new Error(
+            'Faltan variables de entorno de Google Calendar. Revisa GCAL_CLIENT_ID, GCAL_CLIENT_SECRET, GCAL_REDIRECT_URI y GCAL_REFRESH_TOKEN.'
+        )
+    }
+}
+
+function mapGoogleEventToAppEvent(item) {
+    return {
+        id: item.id,
+        summary: item.summary || '',
+        description: item.description || '',
+        location: item.location || '',
+        start: item.start || {},
+        end: item.end || {},
+        timeZone:
+            item.start?.timeZone ||
+            item.end?.timeZone ||
+            TIMEZONE,
+        status: item.status || 'confirmed',
+        uid: item.iCalUID || '',
+        categories: [],
+        notes: '',
+        productId: '-//Santiago Haspert Piaggio//Calendar ICS//EN'
+    }
+}
+
+function buildGoogleResourceFromDraft(draft) {
+    return {
+        summary: draft.summary,
+        description: draft.description || '',
+        location: draft.location || '',
+        status:
+            String(draft.status || '').toUpperCase() === 'CANCELLED'
+                ? 'cancelled'
+                : 'confirmed',
+        start: {
+            dateTime: draft.startDateTime,
+            timeZone: draft.timeZone || TIMEZONE
+        },
+        end: {
+            dateTime: draft.endDateTime,
+            timeZone: draft.timeZone || TIMEZONE
+        }
+    }
+}
+
+async function obtenerEventos() {
+    ensureGoogleAuthConfigured()
+
+    const res = await calendar.events.list({
+        calendarId: CALENDAR_ID,
+        timeMin: new Date().toISOString(),
+        maxResults: 50,
+        singleEvents: true,
+        orderBy: 'startTime',
+        fields:
+            'items(id,summary,description,location,status,iCalUID,start,end),nextPageToken'
+    })
+
+    return (res.data.items || []).map(mapGoogleEventToAppEvent)
+}
+
+async function crearEventoDesdeDraft(draft) {
+    ensureGoogleAuthConfigured()
+
+    const resource = buildGoogleResourceFromDraft(draft)
+
+    const res = await calendar.events.insert({
+        calendarId: CALENDAR_ID,
+        resource
+    })
+
+    return mapGoogleEventToAppEvent(res.data)
+}
+
+async function actualizarEventoDesdeDraft(id, draft) {
+    ensureGoogleAuthConfigured()
+
+    const resource = buildGoogleResourceFromDraft(draft)
+
+    const res = await calendar.events.update({
+        calendarId: CALENDAR_ID,
+        eventId: id,
+        resource
+    })
+
+    return mapGoogleEventToAppEvent(res.data)
+}
+
+async function eliminarEvento(id) {
+    ensureGoogleAuthConfigured()
+
+    await calendar.events.delete({
+        calendarId: CALENDAR_ID,
+        eventId: id
+    })
+}
+
+async function obtenerTodosLosEventos({ maxResults = 250 } = {}) {
+    ensureGoogleAuthConfigured()
+
+    const res = await calendar.events.list({
+        calendarId: CALENDAR_ID,
+        timeMin: new Date('2000-01-01T00:00:00.000Z').toISOString(),
+        maxResults,
+        singleEvents: true,
+        orderBy: 'startTime',
+        fields:
+            'items(id,summary,description,location,status,iCalUID,start,end),nextPageToken'
+    })
+
+    return (res.data.items || []).map(mapGoogleEventToAppEvent)
+}
+
+module.exports = {
+    obtenerEventos,
+    crearEventoDesdeDraft,
+    actualizarEventoDesdeDraft,
+    eliminarEvento,
+    obtenerTodosLosEventos
+}// functions/eventos/index.cjs
+
+const {
+    obtenerEventos,
+    crearEventoDesdeDraft
+} = require('./googleCalendarService.cjs')
+
+function jsonHeaders() {
+    return {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+    }
+}
+
+function parseBody(body) {
+    if (!body) return {}
+
+    try {
+        return JSON.parse(body)
+    } catch (error) {
+        throw new Error('El body JSON no es válido.')
+    }
+}
+
+function validateDraftPayload(payload) {
+    if (!payload || typeof payload !== 'object') {
+        throw new Error('Payload inválido.')
+    }
+
+    if (!payload.draft || typeof payload.draft !== 'object') {
+        throw new Error('Falta el draft.')
+    }
+
+    if (!String(payload.icsContent || '').trim()) {
+        throw new Error('Falta el contenido ICS.')
+    }
+}
+
+exports.handler = async function (event) {
+    const headers = jsonHeaders()
+
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 204,
+            headers,
+            body: ''
+        }
+    }
+
+    if (event.httpMethod === 'GET') {
+        try {
+            const items = await obtenerEventos()
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify(items)
+            }
+        } catch (err) {
+            console.error(err)
+            return {
+                statusCode: 500,
+                headers,
+                body: JSON.stringify({
+                    error: err.message || 'Error al listar eventos'
+                })
+            }
+        }
+    }
+
+    if (event.httpMethod === 'POST') {
+        try {
+            const payload = parseBody(event.body)
+            validateDraftPayload(payload)
+
+            const nuevo = await crearEventoDesdeDraft(payload.draft)
+
+            return {
+                statusCode: 201,
+                headers,
+                body: JSON.stringify(nuevo)
+            }
+        } catch (err) {
+            console.error(err)
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({
+                    error: err.message || 'Error al crear evento'
+                })
+            }
+        }
+    }
+
+    return {
+        statusCode: 405,
+        headers,
+        body: JSON.stringify({ error: 'Método no permitido' })
+    }
+}// functions/ics/import.cjs
+
+const { crearEventoDesdeDraft } = require('../eventos/googleCalendarService.cjs')
+
+function jsonHeaders() {
+    return {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST,OPTIONS'
+    }
+}
+
+function parseBody(body) {
+    if (!body) return {}
+
+    try {
+        return JSON.parse(body)
+    } catch (error) {
+        throw new Error('El body JSON no es válido.')
+    }
+}
+
+function getMatch(content, regex) {
+    const match = content.match(regex)
+    return match ? match[1].trim() : ''
+}
+
+function unescapeIcsText(value) {
+    return String(value || '')
+        .replace(/\\n/g, '\n')
+        .replace(/\\,/g, ',')
+        .replace(/\\;/g, ';')
+        .replace(/\\\\/g, '\\')
+}
+
+function parseIcsToDraft(icsContent) {
+    const content = String(icsContent || '')
+
+    if (!content.includes('BEGIN:VCALENDAR') || !content.includes('BEGIN:VEVENT')) {
+        throw new Error('El contenido ICS no contiene un VEVENT válido.')
+    }
+
+    const summary = unescapeIcsText(getMatch(content, /SUMMARY:(.+)/))
+    const location = unescapeIcsText(getMatch(content, /LOCATION:(.+)/))
+    const description = unescapeIcsText(getMatch(content, /DESCRIPTION:(.+)/))
+    const uid = unescapeIcsText(getMatch(content, /UID:(.+)/))
+    const status = unescapeIcsText(getMatch(content, /STATUS:(.+)/)) || 'CONFIRMED'
+
+    const dtStartMatch = content.match(/DTSTART(?:;TZID=([^:]+))?:(.+)/)
+    const dtEndMatch = content.match(/DTEND(?:;TZID=([^:]+))?:(.+)/)
+
+    if (!dtStartMatch || !dtEndMatch) {
+        throw new Error('El contenido ICS debe incluir DTSTART y DTEND.')
+    }
+
+    const timeZone =
+        (dtStartMatch[1] || dtEndMatch[1] || 'Europe/Dublin').trim()
+
+    const startDateTime = normalizeIcsDateTime(dtStartMatch[2])
+    const endDateTime = normalizeIcsDateTime(dtEndMatch[2])
+
+    const start = new Date(startDateTime)
+    const end = new Date(endDateTime)
+    const durationMinutes = Math.max(
+        1,
+        Math.round((end.getTime() - start.getTime()) / 60000)
+    )
+
+    return {
+        summary,
+        description,
+        location,
+        startDateTime,
+        endDateTime,
+        durationMinutes,
+        timeZone,
+        uid,
+        status,
+        productId: '-//Santiago Haspert Piaggio//Calendar ICS//EN',
+        categories: [],
+        notes: ''
+    }
+}
+
+function normalizeIcsDateTime(value) {
+    const clean = String(value || '').trim().replace(/Z$/, '')
+
+    const match = clean.match(
+        /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/
+    )
+
+    if (!match) {
+        throw new Error(`No se pudo interpretar la fecha ICS: ${value}`)
+    }
+
+    const [, year, month, day, hours, minutes] = match
+    return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+exports.handler = async function (event) {
+    const headers = jsonHeaders()
+
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 204,
+            headers,
+            body: ''
+        }
+    }
+
+    if (event.httpMethod !== 'POST') {
+        return {
+            statusCode: 405,
+            headers,
+            body: JSON.stringify({ error: 'Método no permitido' })
+        }
+    }
+
+    try {
+        const body = parseBody(event.body)
+        const icsContent = String(body?.icsContent || '').trim()
+
+        if (!icsContent) {
+            throw new Error('Debes enviar contenido ICS.')
+        }
+
+        const draft = parseIcsToDraft(icsContent)
+        const created = await crearEventoDesdeDraft(draft)
+
+        return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({
+                ok: true,
+                message: 'Archivo ICS importado correctamente.',
+                event: created
+            })
+        }
+    } catch (err) {
+        console.error(err)
+        return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+                error: err.message || 'No se pudo importar el archivo ICS.'
+            })
+        }
+    }
+}// functions/ics/export.cjs
+
+const { obtenerTodosLosEventos } = require('../eventos/googleCalendarService.cjs')
+
+function icsHeaders() {
+    return {
+        'Content-Type': 'text/calendar; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="calendario.ics"',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET,OPTIONS'
+    }
+}
+
+function pad(value) {
+    return String(value).padStart(2, '0')
+}
+
+function toLocalIcsDateTime(value) {
+    const date = new Date(value)
+
+    if (Number.isNaN(date.getTime())) {
+        throw new Error(`Fecha inválida: ${value}`)
+    }
+
+    return [
+        date.getFullYear(),
+        pad(date.getMonth() + 1),
+        pad(date.getDate())
+    ].join('') +
+        'T' +
+        [pad(date.getHours()), pad(date.getMinutes()), pad(date.getSeconds())].join('')
+}
+
+function toUtcStamp(date = new Date()) {
+    return [
+        date.getUTCFullYear(),
+        pad(date.getUTCMonth() + 1),
+        pad(date.getUTCDate())
+    ].join('') +
+        'T' +
+        [pad(date.getUTCHours()), pad(date.getUTCMinutes()), pad(date.getUTCSeconds())].join('') +
+        'Z'
+}
+
+function escapeIcsText(value) {
+    return String(value || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/\r\n/g, '\n')
+        .replace(/\n/g, '\\n')
+        .replace(/,/g, '\\,')
+        .replace(/;/g, '\\;')
+}
+
+function eventToIcsBlock(evento) {
+    const start = evento?.start?.dateTime || evento?.start?.date || ''
+    const end = evento?.end?.dateTime || evento?.end?.date || ''
+    const timeZone =
+        evento?.timeZone ||
+        evento?.start?.timeZone ||
+        evento?.end?.timeZone ||
+        'Europe/Dublin'
+
+    return [
+        'BEGIN:VEVENT',
+        `UID:${escapeIcsText(evento.uid || `${evento.id}@calendar.local`)}`,
+        `DTSTAMP:${toUtcStamp()}`,
+        `DTSTART;TZID=${escapeIcsText(timeZone)}:${toLocalIcsDateTime(start)}`,
+        `DTEND;TZID=${escapeIcsText(timeZone)}:${toLocalIcsDateTime(end)}`,
+        `SUMMARY:${escapeIcsText(evento.summary || 'Sin título')}`,
+        evento.location ? `LOCATION:${escapeIcsText(evento.location)}` : '',
+        evento.description ? `DESCRIPTION:${escapeIcsText(evento.description)}` : '',
+        'END:VEVENT'
+    ]
+        .filter(Boolean)
+        .join('\r\n')
+}
+
+exports.handler = async function (event) {
+    const headers = icsHeaders()
+
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 204,
+            headers,
+            body: ''
+        }
+    }
+
+    if (event.httpMethod !== 'GET') {
+        return {
+            statusCode: 405,
+            headers: {
+                ...headers,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ error: 'Método no permitido' })
+        }
+    }
+
+    try {
+        const eventos = await obtenerTodosLosEventos()
+
+        const body = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Santiago Haspert Piaggio//Calendar ICS//EN',
+            'CALSCALE:GREGORIAN',
+            'METHOD:PUBLISH',
+            ...eventos.map(eventToIcsBlock),
+            'END:VCALENDAR',
+            ''
+        ].join('\r\n')
+
+        return {
+            statusCode: 200,
+            headers,
+            body
+        }
+    } catch (err) {
+        console.error(err)
+        return {
+            statusCode: 500,
+            headers: {
+                ...headers,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                error: err.message || 'No se pudo exportar el calendario.'
+            })
+        }
+    }
+}// functions/oauth2-initiateAuth.cjs
+
+const { google } = require('googleapis')
+
+const {
+    GCAL_CLIENT_ID,
+    GCAL_CLIENT_SECRET,
+    GCAL_REDIRECT_URI
+} = process.env
+
+exports.handler = async function () {
+    if (!GCAL_CLIENT_ID || !GCAL_CLIENT_SECRET || !GCAL_REDIRECT_URI) {
+        return {
+            statusCode: 500,
+            body: 'Faltan variables de entorno OAuth de Google Calendar.'
+        }
+    }
+
+    const oAuth2Client = new google.auth.OAuth2(
+        GCAL_CLIENT_ID,
+        GCAL_CLIENT_SECRET,
+        GCAL_REDIRECT_URI
+    )
+
+    const authUrl = oAuth2Client.generateAuthUrl({
+        access_type: 'offline',
+        prompt: 'consent',
+        scope: ['https://www.googleapis.com/auth/calendar']
+    })
+
+    return {
+        statusCode: 302,
+        headers: { Location: authUrl },
+        body: ''
+    }
+}

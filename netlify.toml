@@ -1,0 +1,56 @@
+# netlify.toml
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "functions"
+
+[dev]
+  command = "npm run dev"
+  targetPort = 3001
+  publish = "dist"
+  autoLaunch = false
+
+[[redirects]]
+  from = "/api/eventos"
+  to = "/.netlify/functions/eventos"
+  status = 200
+
+[[redirects]]
+  from = "/api/eventos/:id"
+  to = "/.netlify/functions/eventos-by-id"
+  status = 200
+
+[[redirects]]
+  from = "/api/ai/event-draft"
+  to = "/.netlify/functions/ai/event-draft"
+  status = 200
+
+[[redirects]]
+  from = "/api/ics/import"
+  to = "/.netlify/functions/ics/import"
+  status = 200
+
+[[redirects]]
+  from = "/api/ics/export"
+  to = "/.netlify/functions/ics/export"
+  status = 200
+
+# OAuth server-side legacy deprecated.
+# Se mantienen solo por compatibilidad temporal, pero la nueva implementación
+# usa Google Identity Services en frontend.
+
+[[redirects]]
+  from = "/oauth/google/init"
+  to = "/.netlify/functions/oauth2-initiateAuth"
+  status = 200
+
+[[redirects]]
+  from = "/oauth/google/callback"
+  to = "/.netlify/functions/oauth2-callback"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
