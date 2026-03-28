@@ -15,7 +15,7 @@ export default function Home() {
     return (
         <div className="home-container">
             <div className="home-hero">
-                <h1 className="home-title">Calendario ICS</h1>
+                <h1 className="home-title">Calendario</h1>
                 <h2 className="home-subtitle">
                     Crea, revisa y confirma eventos a partir de archivos .ics antes de guardarlos.
                 </h2>

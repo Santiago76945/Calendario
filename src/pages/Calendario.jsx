@@ -52,7 +52,8 @@ export default function Calendario() {
 
     const sessionActive = isGoogleSessionActive()
     const assignedCalendar = getAssignedCalendar()
-    const readyToUseCalendar = sessionActive && hasAssignedCalendar()
+    const hasCalendarAssigned = hasAssignedCalendar()
+    const readyToUseCalendar = sessionActive && hasCalendarAssigned
 
     useEffect(() => {
         if (!readyToUseCalendar) {
@@ -77,6 +78,22 @@ export default function Calendario() {
         setPageTokensByPage({ 1: '' })
         setHasNextPage(false)
         setTotalKnownPages(1)
+    }
+
+    function getCalendarBlockedMessage() {
+        if (!sessionActive && hasCalendarAssigned) {
+            return 'La sesión de Google no está activa. Debes reconectar Google para usar el calendario asignado.'
+        }
+
+        if (!sessionActive) {
+            return 'Primero debes conectar Google.'
+        }
+
+        if (!hasCalendarAssigned) {
+            return 'Primero debes asignar un calendario.'
+        }
+
+        return 'Primero debes conectar Google y asignar un calendario.'
     }
 
     async function loadEventos(
@@ -161,7 +178,7 @@ export default function Calendario() {
 
     function abrirCrearManual() {
         if (!readyToUseCalendar) {
-            setError('Primero debes asignar un calendario.')
+            setError(getCalendarBlockedMessage())
             return
         }
 
@@ -172,7 +189,7 @@ export default function Calendario() {
 
     function abrirCrearIA() {
         if (!readyToUseCalendar) {
-            setError('Primero debes asignar un calendario.')
+            setError(getCalendarBlockedMessage())
             return
         }
 
@@ -368,13 +385,20 @@ export default function Calendario() {
                 </div>
 
                 <div className="calendario-actions">
-                    <button type="button" onClick={abrirCrearManual}>
+                    <button
+                        type="button"
+                        onClick={abrirCrearManual}
+                        disabled={!readyToUseCalendar}
+                        title={!readyToUseCalendar ? getCalendarBlockedMessage() : undefined}
+                    >
                         Nuevo evento manual
                     </button>
                     <button
                         type="button"
                         className="calendario-secondary-button"
                         onClick={abrirCrearIA}
+                        disabled={!readyToUseCalendar}
+                        title={!readyToUseCalendar ? getCalendarBlockedMessage() : undefined}
                     >
                         Crear con IA
                     </button>
@@ -385,14 +409,15 @@ export default function Calendario() {
                 <CalendarConnectionStatus onCalendarAssigned={handleCalendarAssigned} />
             </div>
 
+            {error && <p className="calendario-error">{error}</p>}
+
             {!readyToUseCalendar ? (
                 <div className="calendar-empty-state">
-                    Primero conecta Google y asigna un calendario para empezar a trabajar.
+                    {getCalendarBlockedMessage()}
                 </div>
             ) : (
                 <>
                     {cargando && <p className="calendario-loading">Cargando eventos...</p>}
-                    {error && <p className="calendario-error">{error}</p>}
 
                     {!cargando && (
                         <>
