@@ -18,6 +18,7 @@ import {
     hasAssignedCalendar,
     isGoogleSessionActive
 } from '../services/calendarConfigStorageService'
+import { bootstrapGoogleCalendarSession } from '../services/googleSessionBootstrapService'
 import '../styles/calendario.css'
 
 const CREATION_MODES = {
@@ -43,6 +44,8 @@ export default function Calendario() {
     const [modalError, setModalError] = useState('')
 
     const [connectionRefreshKey, setConnectionRefreshKey] = useState(0)
+    const [checkingSession, setCheckingSession] = useState(true)
+    const [sessionRestoreMessage, setSessionRestoreMessage] = useState('')
 
     const [currentPage, setCurrentPage] = useState(1)
     const [pageSize] = useState(DEFAULT_PAGE_SIZE)
@@ -53,9 +56,53 @@ export default function Calendario() {
     const sessionActive = isGoogleSessionActive()
     const assignedCalendar = getAssignedCalendar()
     const hasCalendarAssigned = hasAssignedCalendar()
-    const readyToUseCalendar = sessionActive && hasCalendarAssigned
+    const readyToUseCalendar =
+        !checkingSession && sessionActive && hasCalendarAssigned
 
     useEffect(() => {
+        let cancelled = false
+
+        async function restoreGoogleSession() {
+            setCheckingSession(true)
+            setSessionRestoreMessage('')
+
+            try {
+                const result = await bootstrapGoogleCalendarSession()
+
+                if (cancelled) {
+                    return
+                }
+
+                setSessionRestoreMessage(String(result?.message || '').trim())
+            } catch (err) {
+                if (cancelled) {
+                    return
+                }
+
+                console.error(err)
+                setSessionRestoreMessage(
+                    err.message || 'No se pudo verificar la sesión de Google.'
+                )
+            } finally {
+                if (!cancelled) {
+                    setCheckingSession(false)
+                }
+            }
+        }
+
+        restoreGoogleSession()
+
+        return () => {
+            cancelled = true
+        }
+    }, [connectionRefreshKey])
+
+    useEffect(() => {
+        if (checkingSession) {
+            setCargando(true)
+            return
+        }
+
         if (!readyToUseCalendar) {
             setEventos([])
             setCurrentPage(1)
@@ -71,7 +118,7 @@ export default function Calendario() {
             pageTokenOverride: '',
             replaceKnownTokens: true
         })
-    }, [connectionRefreshKey, readyToUseCalendar])
+    }, [checkingSession, readyToUseCalendar])
 
     function resetPaginationState() {
         setCurrentPage(1)
@@ -81,6 +128,10 @@ export default function Calendario() {
     }
 
     function getCalendarBlockedMessage() {
+        if (checkingSession) {
+            return 'Restaurando sesión de Google...'
+        }
+
         if (!sessionActive && hasCalendarAssigned) {
             return 'La sesión de Google no está activa. Debes reconectar Google para usar el calendario asignado.'
         }
@@ -307,6 +358,11 @@ export default function Calendario() {
         setError(null)
     }
 
+    function handleConnectionCleared() {
+        setConnectionRefreshKey((prev) => prev + 1)
+        setError(null)
+    }
+
     async function handlePageSelect(page) {
         if (cargando || page === currentPage) {
             return
@@ -406,7 +462,12 @@ export default function Calendario() {
             </header>
 
             <div style={{ marginBottom: '1.5rem' }}>
-                <CalendarConnectionStatus onCalendarAssigned={handleCalendarAssigned} />
+                <CalendarConnectionStatus
+                    checkingSession={checkingSession}
+                    sessionRestoreMessage={sessionRestoreMessage}
+                    onCalendarAssigned={handleCalendarAssigned}
+                    onConnectionCleared={handleConnectionCleared}
+                />
             </div>
 
             {error && <p className="calendario-error">{error}</p>}

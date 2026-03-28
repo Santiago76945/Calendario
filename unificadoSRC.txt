@@ -1963,6 +1963,61 @@ functions
     min-width: 140px;
 }
 
+.calendar-pagination {
+    margin-top: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.85rem;
+    flex-wrap: wrap;
+}
+
+.calendar-pagination-pages {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.calendar-pagination-button {
+    min-width: 42px;
+    min-height: 42px;
+    padding: 0.65rem 0.9rem;
+    border-radius: 10px;
+    border: 1px solid #d7deea;
+    background: #fff;
+    color: #172033;
+    font-weight: 600;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.calendar-pagination-button:hover:not(:disabled) {
+    background: #f8fafc;
+    border-color: #b7c3d8;
+}
+
+.calendar-pagination-button-active,
+.calendar-pagination-button-active:hover:not(:disabled) {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+}
+
+.calendar-pagination-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.calendar-pagination-ellipsis {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    color: #7b8798;
+    font-weight: 700;
+}
+
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -2082,6 +2137,10 @@ functions
         min-width: auto;
         flex-direction: row;
         flex-wrap: wrap;
+    }
+
+    .calendar-pagination {
+        flex-direction: column;
     }
 }/* src/styles/importexport.css */
 
@@ -2989,6 +3048,179 @@ export default function IcsPreview({
             </div>
         </div>
     )
+}// src/components/BackButton.jsx
+
+import React from 'react'
+import { useNavigate } from 'react-router-dom'
+
+export default function BackButton({ label = 'Volver' }) {
+    const navigate = useNavigate()
+
+    function handleClick() {
+        navigate('/')
+    }
+
+    return (
+        <button
+            type="button"
+            onClick={handleClick}
+            style={{
+                position: 'fixed',
+                top: '16px',
+                left: '16px',
+                zIndex: 9999,
+
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+
+                padding: '0.6rem 0.9rem',
+                borderRadius: '999px',
+
+                border: '1px solid rgba(255,255,255,0.4)',
+                background: 'rgba(255,255,255,0.6)',
+                backdropFilter: 'blur(8px)',
+
+                color: '#172033',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.9)'
+                e.currentTarget.style.borderColor = 'rgba(0,0,0,0.1)'
+            }}
+            onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.6)'
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)'
+            }}
+        >
+            ← {label}
+        </button>
+    )
+}// src/components/CalendarPagination.jsx
+
+import React from 'react'
+
+function buildVisiblePages(currentPage, totalKnownPages) {
+    if (totalKnownPages <= 1) {
+        return [1]
+    }
+
+    const pages = new Set([1, totalKnownPages])
+
+    for (let page = currentPage - 1; page <= currentPage + 1; page += 1) {
+        if (page >= 1 && page <= totalKnownPages) {
+            pages.add(page)
+        }
+    }
+
+    const sorted = Array.from(pages).sort((a, b) => a - b)
+    const items = []
+
+    for (let index = 0; index < sorted.length; index += 1) {
+        const page = sorted[index]
+        const prev = sorted[index - 1]
+
+        if (index > 0 && page - prev > 1) {
+            items.push('ellipsis')
+        }
+
+        items.push(page)
+    }
+
+    return items
+}
+
+export default function CalendarPagination({
+    currentPage,
+    totalKnownPages,
+    hasNextPage,
+    disabled,
+    onPageSelect,
+    onPrev,
+    onNext
+}) {
+    if (totalKnownPages <= 1 && !hasNextPage) {
+        return null
+    }
+
+    const visibleItems = buildVisiblePages(currentPage, totalKnownPages)
+
+    return (
+        <nav
+            className="calendar-pagination"
+            aria-label="Paginación de eventos"
+        >
+            <button
+                type="button"
+                className="calendar-pagination-button"
+                onClick={onPrev}
+                disabled={disabled || currentPage <= 1}
+            >
+                Anterior
+            </button>
+
+            <div className="calendar-pagination-pages">
+                {visibleItems.map((item, index) => {
+                    if (item === 'ellipsis') {
+                        return (
+                            <span
+                                key={`ellipsis-${index}`}
+                                className="calendar-pagination-ellipsis"
+                            >
+                                ...
+                            </span>
+                        )
+                    }
+
+                    const page = item
+
+                    return (
+                        <button
+                            key={page}
+                            type="button"
+                            className={`calendar-pagination-button ${
+                                page === currentPage
+                                    ? 'calendar-pagination-button-active'
+                                    : ''
+                            }`}
+                            onClick={() => onPageSelect(page)}
+                            disabled={disabled}
+                            aria-current={page === currentPage ? 'page' : undefined}
+                        >
+                            {page}
+                        </button>
+                    )
+                })}
+
+                {hasNextPage && currentPage === totalKnownPages ? (
+                    <>
+                        <span className="calendar-pagination-ellipsis">...</span>
+                        <button
+                            type="button"
+                            className="calendar-pagination-button"
+                            onClick={onNext}
+                            disabled={disabled}
+                        >
+                            {totalKnownPages + 1}
+                        </button>
+                    </>
+                ) : null}
+            </div>
+
+            <button
+                type="button"
+                className="calendar-pagination-button"
+                onClick={onNext}
+                disabled={disabled || !hasNextPage}
+            >
+                Siguiente
+            </button>
+        </nav>
+    )
 }// src/components/CalendarConnectionStatus.jsx
 
 import React from 'react'
@@ -3486,6 +3718,7 @@ import React, { useMemo, useState } from 'react'
 import * as calendarService from '../services/calendarService'
 import { validateIcsContent } from '../services/icsService'
 import CalendarConnectionStatus from '../components/CalendarConnectionStatus'
+import BackButton from '../components/BackButton'
 import {
     getAssignedCalendar,
     hasAssignedCalendar,
@@ -3572,6 +3805,8 @@ export default function ImportExport() {
 
     return (
         <div className="importexport-container">
+            <BackButton />
+
             <header className="importexport-header">
                 <div>
                     <h2 className="importexport-title">Importar / Exportar eventos ICS</h2>
@@ -3663,10 +3898,12 @@ export default function ImportExport() {
 
 import React, { useEffect, useMemo, useState } from 'react'
 import CalendarList from '../components/CalendarList'
+import CalendarPagination from '../components/CalendarPagination'
 import EventForm from '../components/EventForm'
 import IcsPreview from '../components/IcsPreview'
 import AiEventComposer from '../components/AiEventComposer'
 import CalendarConnectionStatus from '../components/CalendarConnectionStatus'
+import BackButton from '../components/BackButton'
 import * as calendarService from '../services/calendarService'
 import {
     createIcsFromDraft,
@@ -3683,6 +3920,8 @@ const CREATION_MODES = {
     MANUAL: 'manual',
     AI: 'ai'
 }
+
+const DEFAULT_PAGE_SIZE = 10
 
 export default function Calendario() {
     const [eventos, setEventos] = useState([])
@@ -3701,27 +3940,120 @@ export default function Calendario() {
 
     const [connectionRefreshKey, setConnectionRefreshKey] = useState(0)
 
+    const [currentPage, setCurrentPage] = useState(1)
+    const [pageSize] = useState(DEFAULT_PAGE_SIZE)
+    const [pageTokensByPage, setPageTokensByPage] = useState({ 1: '' })
+    const [hasNextPage, setHasNextPage] = useState(false)
+    const [totalKnownPages, setTotalKnownPages] = useState(1)
+
     const sessionActive = isGoogleSessionActive()
     const assignedCalendar = getAssignedCalendar()
-    const readyToUseCalendar = sessionActive && hasAssignedCalendar()
+    const hasCalendarAssigned = hasAssignedCalendar()
+    const readyToUseCalendar = sessionActive && hasCalendarAssigned
 
     useEffect(() => {
         if (!readyToUseCalendar) {
             setEventos([])
+            setCurrentPage(1)
+            setPageTokensByPage({ 1: '' })
+            setHasNextPage(false)
+            setTotalKnownPages(1)
             setCargando(false)
             return
         }
 
-        loadEventos()
+        resetPaginationState()
+        loadEventos(1, {
+            pageTokenOverride: '',
+            replaceKnownTokens: true
+        })
     }, [connectionRefreshKey, readyToUseCalendar])
 
-    async function loadEventos() {
+    function resetPaginationState() {
+        setCurrentPage(1)
+        setPageTokensByPage({ 1: '' })
+        setHasNextPage(false)
+        setTotalKnownPages(1)
+    }
+
+    function getCalendarBlockedMessage() {
+        if (!sessionActive && hasCalendarAssigned) {
+            return 'La sesión de Google no está activa. Debes reconectar Google para usar el calendario asignado.'
+        }
+
+        if (!sessionActive) {
+            return 'Primero debes conectar Google.'
+        }
+
+        if (!hasCalendarAssigned) {
+            return 'Primero debes asignar un calendario.'
+        }
+
+        return 'Primero debes conectar Google y asignar un calendario.'
+    }
+
+    async function loadEventos(
+        targetPage = 1,
+        options = {}
+    ) {
+        const {
+            pageTokenOverride,
+            replaceKnownTokens = false
+        } = options
+
+        const safeTargetPage = Math.max(1, Number(targetPage) || 1)
+
+        const pageToken =
+            typeof pageTokenOverride === 'string'
+                ? pageTokenOverride
+                : pageTokensByPage[safeTargetPage]
+
+        if (pageToken === undefined) {
+            setError('No se puede abrir esa página todavía.')
+            return
+        }
+
         setCargando(true)
 
         try {
-            const data = await calendarService.getEventos()
-            setEventos(Array.isArray(data) ? data : [])
+            const data = await calendarService.getEventos({
+                pageToken,
+                pageSize
+            })
+
+            const items = Array.isArray(data?.items) ? data.items : []
+            const nextPageToken = String(data?.nextPageToken || '')
+            const nextPageExists = Boolean(nextPageToken)
+
+            setEventos(items)
+            setCurrentPage(safeTargetPage)
+            setHasNextPage(nextPageExists)
             setError(null)
+
+            setPageTokensByPage((prev) => {
+                const baseTokens = replaceKnownTokens ? { 1: '' } : { ...prev }
+
+                baseTokens[safeTargetPage] = pageToken
+
+                if (nextPageExists) {
+                    baseTokens[safeTargetPage + 1] = nextPageToken
+                } else {
+                    delete baseTokens[safeTargetPage + 1]
+                }
+
+                return baseTokens
+            })
+
+            setTotalKnownPages((prev) => {
+                if (nextPageExists) {
+                    return Math.max(prev, safeTargetPage + 1)
+                }
+
+                return Math.max(
+                    1,
+                    Math.min(prev, safeTargetPage)
+                )
+            })
         } catch (err) {
             console.error(err)
             setError(err.message || 'No se pudieron cargar los eventos.')
@@ -3742,7 +4074,7 @@ export default function Calendario() {
 
     function abrirCrearManual() {
         if (!readyToUseCalendar) {
-            setError('Primero debes asignar un calendario.')
+            setError(getCalendarBlockedMessage())
             return
         }
 
@@ -3753,7 +4085,7 @@ export default function Calendario() {
 
     function abrirCrearIA() {
         if (!readyToUseCalendar) {
-            setError('Primero debes asignar un calendario.')
+            setError(getCalendarBlockedMessage())
             return
         }
 
@@ -3794,29 +4126,24 @@ export default function Calendario() {
         setModalError('')
 
         try {
-            let resultado
-
             if (eventoEditar?.id) {
-                resultado = await calendarService.updateEventoFromDraft(
+                await calendarService.updateEventoFromDraft(
                     eventoEditar.id,
                     draftActual,
                     icsPreview
                 )
-
-                setEventos((prev) =>
-                    prev.map((ev) => (ev.id === resultado.id ? resultado : ev))
-                )
             } else {
-                resultado = await calendarService.createEventoFromDraft(
+                await calendarService.createEventoFromDraft(
                     draftActual,
                     icsPreview
                 )
-
-                setEventos((prev) => [resultado, ...prev])
             }
 
             setError(null)
             cerrarModal()
+
+            const pageToken = pageTokensByPage[currentPage] ?? ''
+            await loadEventos(currentPage, { pageTokenOverride: pageToken })
         } catch (err) {
             console.error(err)
             setModalError(err.message || 'No se pudo guardar el evento.')
@@ -3828,8 +4155,15 @@ export default function Calendario() {
     async function handleEliminar(id) {
         try {
             await calendarService.deleteEvento(id)
-            setEventos((prev) => prev.filter((ev) => ev.id !== id))
             setError(null)
+
+            const shouldGoToPreviousPage =
+                eventos.length === 1 && currentPage > 1
+
+            const targetPage = shouldGoToPreviousPage ? currentPage - 1 : currentPage
+            const pageToken = pageTokensByPage[targetPage] ?? ''
+
+            await loadEventos(targetPage, { pageTokenOverride: pageToken })
         } catch (err) {
             console.error(err)
             setError(err.message || 'No se pudo eliminar el evento.')
@@ -3869,6 +4203,50 @@ export default function Calendario() {
         setError(null)
     }
 
+    async function handlePageSelect(page) {
+        if (cargando || page === currentPage) {
+            return
+        }
+
+        const targetToken = pageTokensByPage[page]
+
+        if (targetToken === undefined) {
+            return
+        }
+
+        await loadEventos(page, { pageTokenOverride: targetToken })
+    }
+
+    async function handlePrevPage() {
+        if (cargando || currentPage <= 1) {
+            return
+        }
+
+        const targetPage = currentPage - 1
+        const targetToken = pageTokensByPage[targetPage]
+
+        if (targetToken === undefined) {
+            return
+        }
+
+        await loadEventos(targetPage, { pageTokenOverride: targetToken })
+    }
+
+    async function handleNextPage() {
+        if (cargando || !hasNextPage) {
+            return
+        }
+
+        const targetPage = currentPage + 1
+        const targetToken = pageTokensByPage[targetPage]
+
+        if (targetToken === undefined) {
+            return
+        }
+
+        await loadEventos(targetPage, { pageTokenOverride: targetToken })
+    }
+
     const modalTitle = useMemo(() => {
         if (icsPreview) {
             if (previewReadOnly) {
@@ -3887,6 +4265,8 @@ export default function Calendario() {
 
     return (
         <div className="calendario-container">
+            <BackButton />
+
             <header className="calendario-header">
                 <div>
                     <h2 className="calendario-title">Agenda de eventos</h2>
@@ -3901,13 +4281,20 @@ export default function Calendario() {
                 </div>
 
                 <div className="calendario-actions">
-                    <button type="button" onClick={abrirCrearManual}>
+                    <button
+                        type="button"
+                        onClick={abrirCrearManual}
+                        disabled={!readyToUseCalendar}
+                        title={!readyToUseCalendar ? getCalendarBlockedMessage() : undefined}
+                    >
                         Nuevo evento manual
                     </button>
                     <button
                         type="button"
                         className="calendario-secondary-button"
                         onClick={abrirCrearIA}
+                        disabled={!readyToUseCalendar}
+                        title={!readyToUseCalendar ? getCalendarBlockedMessage() : undefined}
                     >
                         Crear con IA
                     </button>
@@ -3918,24 +4305,37 @@ export default function Calendario() {
                 <CalendarConnectionStatus onCalendarAssigned={handleCalendarAssigned} />
             </div>
 
+            {error && <p className="calendario-error">{error}</p>}
+
             {!readyToUseCalendar ? (
                 <div className="calendar-empty-state">
-                    Primero conecta Google y asigna un calendario para empezar a trabajar.
+                    {getCalendarBlockedMessage()}
                 </div>
             ) : (
                 <>
                     {cargando && <p className="calendario-loading">Cargando eventos...</p>}
-                    {error && <p className="calendario-error">{error}</p>}
 
                     {!cargando && (
-                        <div className="calendario-list">
-                            <CalendarList
-                                eventos={eventos}
-                                onEditar={abrirEdicion}
-                                onEliminar={handleEliminar}
-                                onVerIcs={handleVerIcs}
+                        <>
+                            <div className="calendario-list">
+                                <CalendarList
+                                    eventos={eventos}
+                                    onEditar={abrirEdicion}
+                                    onEliminar={handleEliminar}
+                                    onVerIcs={handleVerIcs}
+                                />
+                            </div>
+
+                            <CalendarPagination
+                                currentPage={currentPage}
+                                totalKnownPages={totalKnownPages}
+                                hasNextPage={hasNextPage}
+                                disabled={cargando}
+                                onPageSelect={handlePageSelect}
+                                onPrev={handlePrevPage}
+                                onNext={handleNextPage}
                             />
-                        </div>
+                        </>
                     )}
                 </>
             )}
@@ -4004,7 +4404,7 @@ export default function Home() {
     return (
         <div className="home-container">
             <div className="home-hero">
-                <h1 className="home-title">Calendario ICS</h1>
+                <h1 className="home-title">Calendario</h1>
                 <h2 className="home-subtitle">
                     Crea, revisa y confirma eventos a partir de archivos .ics antes de guardarlos.
                 </h2>
@@ -5178,8 +5578,22 @@ async function handleJsonResponse(res) {
     return null
 }
 
-async function getEventos() {
-    const res = await fetch(API_BASE, {
+function buildEventosUrl({ pageToken = '', pageSize } = {}) {
+    const url = new URL(API_BASE, window.location.origin)
+
+    if (String(pageToken || '').trim()) {
+        url.searchParams.set('pageToken', String(pageToken).trim())
+    }
+
+    if (Number.isFinite(Number(pageSize))) {
+        url.searchParams.set('pageSize', String(Math.trunc(Number(pageSize))))
+    }
+
+    return `${url.pathname}${url.search}`
+}
+
+async function getEventos(options = {}) {
+    const res = await fetch(buildEventosUrl(options), {
         headers: buildAuthorizedHeaders()
     })
 

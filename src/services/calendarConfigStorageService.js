@@ -2,6 +2,8 @@
 
 import { STORAGE_KEYS } from '../constants/storageKeys'
 
+const SESSION_EXPIRY_SKEW_MS = 60 * 1000
+
 function safeGetItem(key) {
     try {
         return window.localStorage.getItem(key)
@@ -32,18 +34,21 @@ export function saveGoogleSession({
     expiresAt,
     email = ''
 }) {
-    if (!accessToken || !expiresAt) {
-        throw new Error('Falta información de sesión de Google.')
+    const token = String(accessToken || '').trim()
+    const safeExpiresAt = Number(expiresAt || 0)
+
+    if (!token || !Number.isFinite(safeExpiresAt) || safeExpiresAt <= 0) {
+        throw new Error('Falta información válida de sesión de Google.')
     }
 
-    safeSetItem(STORAGE_KEYS.GOOGLE_ACCESS_TOKEN, String(accessToken))
+    safeSetItem(STORAGE_KEYS.GOOGLE_ACCESS_TOKEN, token)
     safeSetItem(
         STORAGE_KEYS.GOOGLE_ACCESS_TOKEN_EXPIRES_AT,
-        String(expiresAt)
+        String(safeExpiresAt)
     )
 
     if (email) {
-        safeSetItem(STORAGE_KEYS.GOOGLE_CONNECTED_EMAIL, String(email))
+        safeSetItem(STORAGE_KEYS.GOOGLE_CONNECTED_EMAIL, String(email).trim())
     }
 }
 
@@ -63,15 +68,37 @@ export function getGoogleConnectedEmail() {
     return value ? String(value).trim() : ''
 }
 
-export function isGoogleSessionActive() {
-    const token = getGoogleAccessToken()
+export function getGoogleSessionSnapshot() {
+    const accessToken = getGoogleAccessToken()
     const expiresAt = getGoogleAccessTokenExpiresAt()
+    const email = getGoogleConnectedEmail()
+    const now = Date.now()
 
-    if (!token || !expiresAt) {
-        return false
+    const hasToken = Boolean(accessToken)
+    const hasExpiry = Number.isFinite(expiresAt) && expiresAt > 0
+    const expiresInMs = hasExpiry ? expiresAt - now : 0
+    const active = hasToken && hasExpiry && expiresInMs > SESSION_EXPIRY_SKEW_MS
+    const expired = !active && hasToken && hasExpiry && expiresInMs <= SESSION_EXPIRY_SKEW_MS
+
+    return {
+        accessToken,
+        expiresAt,
+        email,
+        hasToken,
+        hasExpiry,
+        active,
+        expired,
+        expiresInMs
     }
+}
 
-    return Date.now() < expiresAt
+export function isGoogleSessionActive() {
+    return getGoogleSessionSnapshot().active
+}
+
+export function hasStoredGoogleSession() {
+    const snapshot = getGoogleSessionSnapshot()
+    return Boolean(snapshot.hasToken || snapshot.email || snapshot.hasExpiry)
 }
 
 export function clearGoogleSession() {

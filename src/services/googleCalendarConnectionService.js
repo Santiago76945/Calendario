@@ -31,7 +31,7 @@ function ensureGoogleClientId() {
     return clientId
 }
 
-function loadGoogleIdentityScript() {
+export function loadGoogleIdentityScript() {
     if (googleScriptPromise) {
         return googleScriptPromise
     }
@@ -47,6 +47,11 @@ function loadGoogleIdentityScript() {
         )
 
         if (existing) {
+            if (window.google?.accounts?.oauth2) {
+                resolve()
+                return
+            }
+
             existing.addEventListener('load', () => resolve(), { once: true })
             existing.addEventListener(
                 'error',
@@ -70,7 +75,7 @@ function loadGoogleIdentityScript() {
     return googleScriptPromise
 }
 
-function requestAccessTokenInteractive() {
+function requestGoogleAccessToken({ prompt = 'consent' } = {}) {
     return new Promise((resolve, reject) => {
         const clientId = ensureGoogleClientId()
 
@@ -79,17 +84,21 @@ function requestAccessTokenInteractive() {
             return
         }
 
+        let settled = false
+
         const tokenClient = window.google.accounts.oauth2.initTokenClient({
             client_id: clientId,
             scope: GOOGLE_CALENDAR_SCOPE,
-            prompt: 'consent',
             callback: (response) => {
+                if (settled) return
+                settled = true
+
                 if (!response || response.error) {
                     reject(
                         new Error(
                             response?.error_description ||
-                            response?.error ||
-                            'Google no devolvió un token válido.'
+                                response?.error ||
+                                'Google no devolvió un token válido.'
                         )
                     )
                     return
@@ -98,7 +107,11 @@ function requestAccessTokenInteractive() {
                 const accessToken = String(response.access_token || '').trim()
                 const expiresInSeconds = Number(response.expires_in || 0)
 
-                if (!accessToken || !Number.isFinite(expiresInSeconds) || expiresInSeconds <= 0) {
+                if (
+                    !accessToken ||
+                    !Number.isFinite(expiresInSeconds) ||
+                    expiresInSeconds <= 0
+                ) {
                     reject(new Error('Google devolvió un token inválido.'))
                     return
                 }
@@ -110,11 +123,29 @@ function requestAccessTokenInteractive() {
             }
         })
 
-        tokenClient.requestAccessToken()
+        try {
+            tokenClient.requestAccessToken({ prompt })
+        } catch (error) {
+            reject(
+                error instanceof Error
+                    ? error
+                    : new Error('No se pudo solicitar el token de Google.')
+            )
+        }
     })
 }
 
-async function fetchGoogleJson(url, accessToken) {
+export async function requestAccessTokenInteractive() {
+    await loadGoogleIdentityScript()
+    return requestGoogleAccessToken({ prompt: 'consent' })
+}
+
+export async function requestAccessTokenSilently() {
+    await loadGoogleIdentityScript()
+    return requestGoogleAccessToken({ prompt: '' })
+}
+
+export async function fetchGoogleJson(url, accessToken) {
     const res = await fetch(url, {
         headers: {
             Authorization: `Bearer ${accessToken}`
@@ -150,23 +181,23 @@ async function fetchGoogleJson(url, accessToken) {
     return res.json()
 }
 
-export async function ensureGoogleCalendarConnection() {
-    await loadGoogleIdentityScript()
-
-    const session = await requestAccessTokenInteractive()
-
-    let email = ''
-
+async function fetchGoogleUserEmail(accessToken) {
     try {
         const me = await fetchGoogleJson(
             'https://www.googleapis.com/oauth2/v2/userinfo',
-            session.accessToken
+            accessToken
         )
 
-        email = String(me?.email || '').trim()
+        return String(me?.email || '').trim()
     } catch (error) {
         console.error('No se pudo obtener el email del usuario Google:', error)
+        return ''
     }
+}
+
+export async function ensureGoogleCalendarConnection() {
+    const session = await requestAccessTokenInteractive()
+    const email = await fetchGoogleUserEmail(session.accessToken)
 
     saveGoogleSession({
         accessToken: session.accessToken,
@@ -195,20 +226,23 @@ export async function listAccessibleCalendars() {
 
     return Array.isArray(json?.items)
         ? json.items.map((item) => ({
-            id: String(item.id || '').trim(),
-            summary: String(item.summary || '').trim(),
-            description: String(item.description || '').trim(),
-            timeZone: String(item.timeZone || '').trim(),
-            primary: Boolean(item.primary),
-            accessRole: String(item.accessRole || '').trim(),
-            backgroundColor: String(item.backgroundColor || '').trim(),
-            foregroundColor: String(item.foregroundColor || '').trim()
-        }))
+              id: String(item.id || '').trim(),
+              summary: String(item.summary || '').trim(),
+              description: String(item.description || '').trim(),
+              timeZone: String(item.timeZone || '').trim(),
+              primary: Boolean(item.primary),
+              accessRole: String(item.accessRole || '').trim(),
+              backgroundColor: String(item.backgroundColor || '').trim(),
+              foregroundColor: String(item.foregroundColor || '').trim()
+          }))
         : []
 }
 
 export async function connectAndFetchCalendars() {
-    await ensureGoogleCalendarConnection()
+    if (!isGoogleSessionActive()) {
+        await ensureGoogleCalendarConnection()
+    }
+
     return listAccessibleCalendars()
 }
 

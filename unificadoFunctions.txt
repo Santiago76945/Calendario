@@ -678,7 +678,9 @@ function ensureValidTimeZone(timeZone) {
     const safeTimeZone = String(timeZone || '').trim() || TIMEZONE
 
     try {
-        new Intl.DateTimeFormat('en-US', { timeZone: safeTimeZone }).format(new Date())
+        new Intl.DateTimeFormat('en-US', { timeZone: safeTimeZone }).format(
+            new Date()
+        )
         return safeTimeZone
     } catch (error) {
         throw new Error(`Zona horaria inválida: ${safeTimeZone}`)
@@ -801,8 +803,15 @@ function getUtcDateFromLocalDateTime(localDateTime, timeZone) {
         const zonedParts = getDatePartsInTimeZone(guessDate, safeTimeZone)
 
         const desiredUtcMinutes = Math.round(
-            Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0, 0) /
-                60000
+            Date.UTC(
+                parts.year,
+                parts.month - 1,
+                parts.day,
+                parts.hour,
+                parts.minute,
+                0,
+                0
+            ) / 60000
         )
 
         const actualUtcMinutes = Math.round(
@@ -840,7 +849,9 @@ function toGoogleDateTime(localDateTime, timeZone) {
 
     const { year, month, day, hour, minute } = parseLocalDateTime(localDateTime)
 
-    return `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00${sign}${offsetHours}:${offsetRemainingMinutes}`
+    return `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(
+        minute
+    )}:00${sign}${offsetHours}:${offsetRemainingMinutes}`
 }
 
 function convertAbsoluteDateTimeToLocalDateTime(value, timeZone) {
@@ -853,7 +864,9 @@ function convertAbsoluteDateTimeToLocalDateTime(value, timeZone) {
 
     const parts = getDatePartsInTimeZone(date, safeTimeZone)
 
-    return `${pad(parts.year)}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`
+    return `${String(parts.year).padStart(4, '0')}-${pad(parts.month)}-${pad(
+        parts.day
+    )}T${pad(parts.hour)}:${pad(parts.minute)}`
 }
 
 function getDurationMinutes(startDateTime, endDateTime) {
@@ -928,10 +941,7 @@ function normalizeDraftForGoogle(draft) {
 }
 
 function mapGoogleEventToAppEvent(item) {
-    const eventTimeZone =
-        item.start?.timeZone ||
-        item.end?.timeZone ||
-        TIMEZONE
+    const eventTimeZone = item.start?.timeZone || item.end?.timeZone || TIMEZONE
 
     return {
         id: item.id,
@@ -967,7 +977,10 @@ function buildGoogleResourceFromDraft(draft) {
                 ? 'cancelled'
                 : 'confirmed',
         start: {
-            dateTime: toGoogleDateTime(normalized.startDateTime, normalized.timeZone),
+            dateTime: toGoogleDateTime(
+                normalized.startDateTime,
+                normalized.timeZone
+            ),
             timeZone: normalized.timeZone
         },
         end: {
@@ -978,10 +991,7 @@ function buildGoogleResourceFromDraft(draft) {
 }
 
 function normalizeGoogleApiError(err) {
-    const status =
-        err?.code ||
-        err?.response?.status ||
-        500
+    const status = err?.code || err?.response?.status || 500
 
     const message =
         err?.errors?.[0]?.message ||
@@ -995,24 +1005,46 @@ function normalizeGoogleApiError(err) {
     return wrapped
 }
 
-async function obtenerEventos({ accessToken, calendarId }) {
+function normalizePageSize(pageSize) {
+    const parsed = Number(pageSize)
+
+    if (!Number.isFinite(parsed)) {
+        return 10
+    }
+
+    return Math.max(1, Math.min(25, Math.trunc(parsed)))
+}
+
+async function obtenerEventos({
+    accessToken,
+    calendarId,
+    pageToken = '',
+    pageSize = 10
+}) {
     try {
         ensureAccessToken(accessToken)
         ensureCalendarId(calendarId)
 
         const calendar = createAuthorizedCalendarClient(accessToken)
+        const safePageToken = String(pageToken || '').trim()
+        const safePageSize = normalizePageSize(pageSize)
 
         const res = await calendar.events.list({
             calendarId,
             timeMin: new Date().toISOString(),
-            maxResults: 50,
+            maxResults: safePageSize,
+            pageToken: safePageToken || undefined,
             singleEvents: true,
             orderBy: 'startTime',
             fields:
                 'items(id,summary,description,location,status,iCalUID,start,end),nextPageToken'
         })
 
-        return (res.data.items || []).map(mapGoogleEventToAppEvent)
+        return {
+            items: (res.data.items || []).map(mapGoogleEventToAppEvent),
+            nextPageToken: String(res.data.nextPageToken || ''),
+            pageSize: safePageSize
+        }
     } catch (err) {
         throw normalizeGoogleApiError(err)
     }
@@ -1073,7 +1105,11 @@ async function eliminarEvento({ accessToken, calendarId, id }) {
     }
 }
 
-async function obtenerTodosLosEventos({ accessToken, calendarId, maxResults = 250 }) {
+async function obtenerTodosLosEventos({
+    accessToken,
+    calendarId,
+    maxResults = 250
+}) {
     try {
         ensureAccessToken(accessToken)
         ensureCalendarId(calendarId)
@@ -1176,6 +1212,20 @@ function getRequestContext(event) {
     return { accessToken, calendarId }
 }
 
+function getQueryParam(event, key) {
+    return String(event?.queryStringParameters?.[key] || '').trim()
+}
+
+function parsePageSize(rawValue) {
+    const parsed = Number(rawValue)
+
+    if (!Number.isFinite(parsed)) {
+        return 10
+    }
+
+    return Math.max(1, Math.min(25, Math.trunc(parsed)))
+}
+
 exports.handler = async function (event) {
     const headers = jsonHeaders()
 
@@ -1190,12 +1240,23 @@ exports.handler = async function (event) {
     if (event.httpMethod === 'GET') {
         try {
             const ctx = getRequestContext(event)
-            const items = await obtenerEventos(ctx)
+            const pageToken = getQueryParam(event, 'pageToken')
+            const pageSize = parsePageSize(getQueryParam(event, 'pageSize'))
+
+            const result = await obtenerEventos({
+                ...ctx,
+                pageToken,
+                pageSize
+            })
 
             return {
                 statusCode: 200,
                 headers,
-                body: JSON.stringify(items)
+                body: JSON.stringify({
+                    items: Array.isArray(result?.items) ? result.items : [],
+                    nextPageToken: String(result?.nextPageToken || ''),
+                    pageSize
+                })
             }
         } catch (err) {
             console.error(err)

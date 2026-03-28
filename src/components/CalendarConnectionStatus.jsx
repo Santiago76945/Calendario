@@ -6,21 +6,42 @@ import {
     getAssignedCalendar,
     hasAssignedCalendar,
     isGoogleSessionActive,
-    getGoogleConnectedEmail,
-    clearFullCalendarConnection
+    getGoogleConnectedEmail
 } from '../services/calendarConfigStorageService'
+import { disconnectGoogleCalendar } from '../services/googleCalendarConnectionService'
 
-export default function CalendarConnectionStatus({ onCalendarAssigned }) {
+export default function CalendarConnectionStatus({
+    checkingSession = false,
+    sessionRestoreMessage = '',
+    onCalendarAssigned,
+    onConnectionCleared
+}) {
     const connected = isGoogleSessionActive()
     const assigned = getAssignedCalendar()
     const email = getGoogleConnectedEmail()
 
     function handleDisconnect() {
-        clearFullCalendarConnection()
+        disconnectGoogleCalendar()
+
+        if (typeof onConnectionCleared === 'function') {
+            onConnectionCleared()
+        }
 
         if (typeof onCalendarAssigned === 'function') {
             onCalendarAssigned(null)
         }
+    }
+
+    function getSessionLabel() {
+        if (checkingSession) {
+            return 'Restaurando...'
+        }
+
+        if (connected) {
+            return 'Activa'
+        }
+
+        return 'No conectada'
     }
 
     return (
@@ -38,7 +59,7 @@ export default function CalendarConnectionStatus({ onCalendarAssigned }) {
             </h3>
 
             <p style={{ margin: 0, color: '#5b6472', lineHeight: 1.65 }}>
-                <strong>Sesión Google:</strong> {connected ? 'Activa' : 'No conectada'}
+                <strong>Sesión Google:</strong> {getSessionLabel()}
             </p>
 
             {email ? (
@@ -50,13 +71,25 @@ export default function CalendarConnectionStatus({ onCalendarAssigned }) {
             <p style={{ margin: '0.35rem 0 0', color: '#5b6472', lineHeight: 1.65 }}>
                 <strong>Calendario asignado:</strong>{' '}
                 {hasAssignedCalendar()
-                    ? `${assigned.summary || 'Sin nombre'} (${assigned.id})`
+                    ? `${assigned?.summary || 'Sin nombre'} (${assigned?.id || ''})`
                     : 'Ninguno'}
             </p>
 
             {assigned?.timeZone ? (
                 <p style={{ margin: '0.35rem 0 0', color: '#5b6472', lineHeight: 1.65 }}>
                     <strong>Zona horaria:</strong> {assigned.timeZone}
+                </p>
+            ) : null}
+
+            {sessionRestoreMessage ? (
+                <p
+                    style={{
+                        margin: '0.75rem 0 0',
+                        color: connected ? '#166534' : '#92400e',
+                        lineHeight: 1.65
+                    }}
+                >
+                    {sessionRestoreMessage}
                 </p>
             ) : null}
 
@@ -81,6 +114,7 @@ export default function CalendarConnectionStatus({ onCalendarAssigned }) {
                         type="button"
                         className="button-secondary"
                         onClick={handleDisconnect}
+                        disabled={checkingSession}
                     >
                         Limpiar conexión
                     </button>
