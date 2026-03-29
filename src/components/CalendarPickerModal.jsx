@@ -72,8 +72,8 @@ export default function CalendarPickerModal({
                     </button>
                 </div>
 
-                <div style={{ padding: '1.5rem' }}>
-                    <p style={{ marginTop: 0, color: '#5b6472' }}>
+                <div className="calendar-picker-body">
+                    <p className="calendar-picker-description">
                         Selecciona el calendario que la app usará para listar, crear, editar, eliminar, importar y exportar eventos.
                     </p>
 
@@ -82,56 +82,50 @@ export default function CalendarPickerModal({
                             No se encontraron calendarios accesibles para esta cuenta.
                         </p>
                     ) : (
-                        <div
-                            style={{
-                                display: 'grid',
-                                gap: '0.75rem',
-                                maxHeight: '420px',
-                                overflow: 'auto'
-                            }}
-                        >
+                        <div className="calendar-picker-list">
                             {orderedCalendars.map((calendar) => {
                                 const checked = selectedId === calendar.id
 
                                 return (
                                     <label
                                         key={calendar.id}
-                                        style={{
-                                            display: 'block',
-                                            border: checked
-                                                ? '1px solid #2563eb'
-                                                : '1px solid #d7deea',
-                                            borderRadius: '12px',
-                                            padding: '1rem',
-                                            background: checked ? '#eef2ff' : '#fff',
-                                            cursor: 'pointer'
-                                        }}
+                                        className={`calendar-picker-item${checked ? ' calendar-picker-item-selected' : ''}`}
                                     >
-                                        <input
-                                            type="radio"
-                                            name="calendar-select"
-                                            checked={checked}
-                                            onChange={() => setSelectedId(calendar.id)}
-                                            style={{ marginRight: '0.5rem', width: 'auto' }}
-                                        />
+                                        <div className="calendar-picker-radio-row">
+                                            <input
+                                                type="radio"
+                                                name="calendar-select"
+                                                checked={checked}
+                                                onChange={() => setSelectedId(calendar.id)}
+                                                className="calendar-picker-radio"
+                                            />
 
-                                        <strong>{calendar.summary || calendar.id}</strong>
+                                            <div className="calendar-picker-content">
+                                                <strong>{calendar.summary || calendar.id}</strong>
 
-                                        {calendar.primary ? (
-                                            <span style={{ marginLeft: '0.5rem', color: '#2563eb' }}>
-                                                Principal
-                                            </span>
-                                        ) : null}
+                                                {calendar.primary ? (
+                                                    <span className="calendar-picker-primary">
+                                                        Principal
+                                                    </span>
+                                                ) : null}
 
-                                        <div style={{ marginTop: '0.5rem', color: '#5b6472' }}>
-                                            <div><strong>ID:</strong> {calendar.id}</div>
-                                            <div><strong>Zona horaria:</strong> {calendar.timeZone || '-'}</div>
-                                            <div><strong>Permisos:</strong> {calendar.accessRole || '-'}</div>
-                                            {calendar.description ? (
-                                                <div style={{ marginTop: '0.35rem' }}>
-                                                    <strong>Descripción:</strong> {calendar.description}
+                                                <div className="calendar-picker-meta">
+                                                    <div className="calendar-picker-meta-row">
+                                                        <strong>ID:</strong> {calendar.id}
+                                                    </div>
+                                                    <div className="calendar-picker-meta-row">
+                                                        <strong>Zona horaria:</strong> {calendar.timeZone || '-'}
+                                                    </div>
+                                                    <div className="calendar-picker-meta-row">
+                                                        <strong>Permisos:</strong> {calendar.accessRole || '-'}
+                                                    </div>
+                                                    {calendar.description ? (
+                                                        <div className="calendar-picker-meta-row">
+                                                            <strong>Descripción:</strong> {calendar.description}
+                                                        </div>
+                                                    ) : null}
                                                 </div>
-                                            ) : null}
+                                            </div>
                                         </div>
                                     </label>
                                 )
@@ -145,15 +139,7 @@ export default function CalendarPickerModal({
                         </p>
                     ) : null}
 
-                    <div
-                        style={{
-                            marginTop: '1.25rem',
-                            display: 'flex',
-                            justifyContent: 'flex-end',
-                            gap: '0.75rem',
-                            flexWrap: 'wrap'
-                        }}
-                    >
+                    <div className="calendar-picker-actions">
                         <button
                             type="button"
                             className="button-secondary"

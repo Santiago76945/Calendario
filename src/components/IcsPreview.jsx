@@ -30,37 +30,15 @@ export default function IcsPreview({
     }
 
     return (
-        <div style={{ padding: '1.5rem' }}>
+        <div className="ics-preview">
             {submitError ? (
-                <div
-                    style={{
-                        marginBottom: '1rem',
-                        color: '#991b1b',
-                        background: '#fef2f2',
-                        border: '1px solid #fecaca',
-                        borderRadius: '10px',
-                        padding: '0.85rem 1rem'
-                    }}
-                >
+                <div className="error-text" style={{ marginBottom: '1rem', marginTop: 0 }}>
                     {submitError}
                 </div>
             ) : null}
 
-            <div
-                style={{
-                    display: 'grid',
-                    gap: '1rem',
-                    gridTemplateColumns: 'minmax(280px, 1fr) minmax(320px, 1.3fr)'
-                }}
-            >
-                <section
-                    style={{
-                        border: '1px solid #d7deea',
-                        borderRadius: '12px',
-                        padding: '1rem',
-                        background: '#fff'
-                    }}
-                >
+            <div className="ics-preview-layout">
+                <section className="ics-preview-card">
                     <h4 style={{ marginTop: 0 }}>Resumen</h4>
 
                     <p><strong>Título:</strong> {summary.title}</p>
@@ -75,29 +53,13 @@ export default function IcsPreview({
                     ) : null}
                 </section>
 
-                <section
-                    style={{
-                        border: '1px solid #d7deea',
-                        borderRadius: '12px',
-                        padding: '1rem',
-                        background: '#0f172a',
-                        color: '#e2e8f0'
-                    }}
-                >
-                    <div
-                        style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            gap: '1rem',
-                            marginBottom: '0.75rem'
-                        }}
-                    >
-                        <h4 style={{ margin: 0, color: '#fff' }}>Contenido del .ics</h4>
+                <section className="ics-preview-code-card">
+                    <div className="ics-preview-code-header">
+                        <h4 className="ics-preview-code-title">Contenido del .ics</h4>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div className="ics-preview-copy-area">
                             {copyMessage ? (
-                                <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
+                                <span className="ics-preview-copy-message">
                                     {copyMessage}
                                 </span>
                             ) : null}
@@ -112,31 +74,13 @@ export default function IcsPreview({
                         </div>
                     </div>
 
-                    <pre
-                        style={{
-                            margin: 0,
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                            fontSize: '0.92rem',
-                            lineHeight: 1.6,
-                            fontFamily:
-                                'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
-                        }}
-                    >
+                    <pre className="ics-preview-pre">
                         {icsContent}
                     </pre>
                 </section>
             </div>
 
-            <div
-                style={{
-                    display: 'flex',
-                    justifyContent: 'flex-end',
-                    gap: '0.75rem',
-                    marginTop: '1.5rem',
-                    flexWrap: 'wrap'
-                }}
-            >
+            <div className="ics-preview-actions">
                 <button type="button" className="button-secondary" onClick={onCancel}>
                     Cancelar
                 </button>

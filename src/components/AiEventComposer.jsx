@@ -83,58 +83,40 @@ export default function AiEventComposer({ onCerrar, onGeneratePreview }) {
     }
 
     return (
-        <div style={{ padding: '1.5rem' }}>
-            <div style={{ marginBottom: '1rem' }}>
+        <div className="ai-event-composer">
+            <div className="ai-event-composer-timezone">
                 <TimezoneField value={timeZone} onChange={handleTimezoneChange} />
             </div>
 
-            <div
-                style={{
-                    border: '1px solid #d7deea',
-                    borderRadius: '12px',
-                    padding: '1rem',
-                    background: '#f8fafc',
-                    marginBottom: '1rem'
-                }}
-            >
+            <div className="ai-event-composer-assistant">
                 <strong>Asistente:</strong>
-                <p style={{ marginBottom: 0, marginTop: '0.5rem', color: '#334155' }}>
+                <p className="ai-event-composer-assistant-text">
                     {assistantMessage}
                 </p>
             </div>
 
             {conversation.length > 0 && (
-                <div
-                    style={{
-                        border: '1px solid #d7deea',
-                        borderRadius: '12px',
-                        background: '#fff',
-                        padding: '1rem',
-                        marginBottom: '1rem',
-                        maxHeight: '280px',
-                        overflow: 'auto'
-                    }}
-                >
-                    {conversation.map((item, index) => (
-                        <div
-                            key={`${item.role}-${index}`}
-                            style={{
-                                marginBottom: '0.9rem',
-                                paddingBottom: '0.9rem',
-                                borderBottom:
-                                    index === conversation.length - 1
-                                        ? 'none'
-                                        : '1px solid #eef2f7'
-                            }}
-                        >
-                            <strong>
-                                {item.role === 'user' ? 'Tú' : 'Asistente'}
-                            </strong>
-                            <p style={{ margin: '0.35rem 0 0', whiteSpace: 'pre-wrap' }}>
-                                {item.content}
-                            </p>
-                        </div>
-                    ))}
+                <div className="ai-event-composer-conversation">
+                    {conversation.map((item, index) => {
+                        const isLast = index === conversation.length - 1
+
+                        return (
+                            <div
+                                key={`${item.role}-${index}`}
+                                className={`ai-event-composer-message${isLast ? ' ai-event-composer-message-last' : ''}`}
+                                style={{
+                                    borderBottom: isLast ? 'none' : '1px solid #eef2f7'
+                                }}
+                            >
+                                <strong>
+                                    {item.role === 'user' ? 'Tú' : 'Asistente'}
+                                </strong>
+                                <p className="ai-event-composer-message-text">
+                                    {item.content}
+                                </p>
+                            </div>
+                        )
+                    })}
                 </div>
             )}
 
@@ -154,15 +136,7 @@ export default function AiEventComposer({ onCerrar, onGeneratePreview }) {
                     </p>
                 ) : null}
 
-                <div
-                    style={{
-                        display: 'flex',
-                        justifyContent: 'flex-end',
-                        gap: '0.75rem',
-                        marginTop: '1rem',
-                        flexWrap: 'wrap'
-                    }}
-                >
+                <div className="ai-event-composer-actions">
                     <button
                         type="button"
                         className="button-secondary"

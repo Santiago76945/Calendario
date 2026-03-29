@@ -4,15 +4,7 @@ import React from 'react'
 
 export default function AdvancedEventFields({ values, onChange }) {
     return (
-        <div
-            style={{
-                marginTop: '1rem',
-                padding: '1rem',
-                border: '1px solid #d7deea',
-                borderRadius: '12px',
-                background: '#f8fafc'
-            }}
-        >
+        <div className="advanced-event-fields">
             <div className="event-form-grid">
                 <div className="event-form-field event-form-field-full">
                     <label htmlFor="description">Descripción</label>
