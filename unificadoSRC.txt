@@ -3229,21 +3229,42 @@ import {
     getAssignedCalendar,
     hasAssignedCalendar,
     isGoogleSessionActive,
-    getGoogleConnectedEmail,
-    clearFullCalendarConnection
+    getGoogleConnectedEmail
 } from '../services/calendarConfigStorageService'
+import { disconnectGoogleCalendar } from '../services/googleCalendarConnectionService'
 
-export default function CalendarConnectionStatus({ onCalendarAssigned }) {
+export default function CalendarConnectionStatus({
+    checkingSession = false,
+    sessionRestoreMessage = '',
+    onCalendarAssigned,
+    onConnectionCleared
+}) {
     const connected = isGoogleSessionActive()
     const assigned = getAssignedCalendar()
     const email = getGoogleConnectedEmail()
 
     function handleDisconnect() {
-        clearFullCalendarConnection()
+        disconnectGoogleCalendar()
+
+        if (typeof onConnectionCleared === 'function') {
+            onConnectionCleared()
+        }
 
         if (typeof onCalendarAssigned === 'function') {
             onCalendarAssigned(null)
         }
+    }
+
+    function getSessionLabel() {
+        if (checkingSession) {
+            return 'Restaurando...'
+        }
+
+        if (connected) {
+            return 'Activa'
+        }
+
+        return 'No conectada'
     }
 
     return (
@@ -3261,7 +3282,7 @@ export default function CalendarConnectionStatus({ onCalendarAssigned }) {
             </h3>
 
             <p style={{ margin: 0, color: '#5b6472', lineHeight: 1.65 }}>
-                <strong>Sesión Google:</strong> {connected ? 'Activa' : 'No conectada'}
+                <strong>Sesión Google:</strong> {getSessionLabel()}
             </p>
 
             {email ? (
@@ -3273,13 +3294,25 @@ export default function CalendarConnectionStatus({ onCalendarAssigned }) {
             <p style={{ margin: '0.35rem 0 0', color: '#5b6472', lineHeight: 1.65 }}>
                 <strong>Calendario asignado:</strong>{' '}
                 {hasAssignedCalendar()
-                    ? `${assigned.summary || 'Sin nombre'} (${assigned.id})`
+                    ? `${assigned?.summary || 'Sin nombre'} (${assigned?.id || ''})`
                     : 'Ninguno'}
             </p>
 
             {assigned?.timeZone ? (
                 <p style={{ margin: '0.35rem 0 0', color: '#5b6472', lineHeight: 1.65 }}>
                     <strong>Zona horaria:</strong> {assigned.timeZone}
+                </p>
+            ) : null}
+
+            {sessionRestoreMessage ? (
+                <p
+                    style={{
+                        margin: '0.75rem 0 0',
+                        color: connected ? '#166534' : '#92400e',
+                        lineHeight: 1.65
+                    }}
+                >
+                    {sessionRestoreMessage}
                 </p>
             ) : null}
 
@@ -3304,6 +3337,7 @@ export default function CalendarConnectionStatus({ onCalendarAssigned }) {
                         type="button"
                         className="button-secondary"
                         onClick={handleDisconnect}
+                        disabled={checkingSession}
                     >
                         Limpiar conexión
                     </button>
@@ -3914,6 +3948,7 @@ import {
     hasAssignedCalendar,
     isGoogleSessionActive
 } from '../services/calendarConfigStorageService'
+import { bootstrapGoogleCalendarSession } from '../services/googleSessionBootstrapService'
 import '../styles/calendario.css'
 
 const CREATION_MODES = {
@@ -3939,6 +3974,8 @@ export default function Calendario() {
     const [modalError, setModalError] = useState('')
 
     const [connectionRefreshKey, setConnectionRefreshKey] = useState(0)
+    const [checkingSession, setCheckingSession] = useState(true)
+    const [sessionRestoreMessage, setSessionRestoreMessage] = useState('')
 
     const [currentPage, setCurrentPage] = useState(1)
     const [pageSize] = useState(DEFAULT_PAGE_SIZE)
@@ -3949,9 +3986,53 @@ export default function Calendario() {
     const sessionActive = isGoogleSessionActive()
     const assignedCalendar = getAssignedCalendar()
     const hasCalendarAssigned = hasAssignedCalendar()
-    const readyToUseCalendar = sessionActive && hasCalendarAssigned
+    const readyToUseCalendar =
+        !checkingSession && sessionActive && hasCalendarAssigned
 
     useEffect(() => {
+        let cancelled = false
+
+        async function restoreGoogleSession() {
+            setCheckingSession(true)
+            setSessionRestoreMessage('')
+
+            try {
+                const result = await bootstrapGoogleCalendarSession()
+
+                if (cancelled) {
+                    return
+                }
+
+                setSessionRestoreMessage(String(result?.message || '').trim())
+            } catch (err) {
+                if (cancelled) {
+                    return
+                }
+
+                console.error(err)
+                setSessionRestoreMessage(
+                    err.message || 'No se pudo verificar la sesión de Google.'
+                )
+            } finally {
+                if (!cancelled) {
+                    setCheckingSession(false)
+                }
+            }
+        }
+
+        restoreGoogleSession()
+
+        return () => {
+            cancelled = true
+        }
+    }, [connectionRefreshKey])
+
+    useEffect(() => {
+        if (checkingSession) {
+            setCargando(true)
+            return
+        }
+
         if (!readyToUseCalendar) {
             setEventos([])
             setCurrentPage(1)
@@ -3967,7 +4048,7 @@ export default function Calendario() {
             pageTokenOverride: '',
             replaceKnownTokens: true
         })
-    }, [connectionRefreshKey, readyToUseCalendar])
+    }, [checkingSession, readyToUseCalendar])
 
     function resetPaginationState() {
         setCurrentPage(1)
@@ -3977,6 +4058,10 @@ export default function Calendario() {
     }
 
     function getCalendarBlockedMessage() {
+        if (checkingSession) {
+            return 'Restaurando sesión de Google...'
+        }
+
         if (!sessionActive && hasCalendarAssigned) {
             return 'La sesión de Google no está activa. Debes reconectar Google para usar el calendario asignado.'
         }
@@ -4203,6 +4288,11 @@ export default function Calendario() {
         setError(null)
     }
 
+    function handleConnectionCleared() {
+        setConnectionRefreshKey((prev) => prev + 1)
+        setError(null)
+    }
+
     async function handlePageSelect(page) {
         if (cargando || page === currentPage) {
             return
@@ -4302,7 +4392,12 @@ export default function Calendario() {
             </header>
 
             <div style={{ marginBottom: '1.5rem' }}>
-                <CalendarConnectionStatus onCalendarAssigned={handleCalendarAssigned} />
+                <CalendarConnectionStatus
+                    checkingSession={checkingSession}
+                    sessionRestoreMessage={sessionRestoreMessage}
+                    onCalendarAssigned={handleCalendarAssigned}
+                    onConnectionCleared={handleConnectionCleared}
+                />
             </div>
 
             {error && <p className="calendario-error">{error}</p>}
@@ -5120,6 +5215,8 @@ export function clearAiDraftTimezone() {
 
 import { STORAGE_KEYS } from '../constants/storageKeys'
 
+const SESSION_EXPIRY_SKEW_MS = 60 * 1000
+
 function safeGetItem(key) {
     try {
         return window.localStorage.getItem(key)
@@ -5150,18 +5247,21 @@ export function saveGoogleSession({
     expiresAt,
     email = ''
 }) {
-    if (!accessToken || !expiresAt) {
-        throw new Error('Falta información de sesión de Google.')
+    const token = String(accessToken || '').trim()
+    const safeExpiresAt = Number(expiresAt || 0)
+
+    if (!token || !Number.isFinite(safeExpiresAt) || safeExpiresAt <= 0) {
+        throw new Error('Falta información válida de sesión de Google.')
     }
 
-    safeSetItem(STORAGE_KEYS.GOOGLE_ACCESS_TOKEN, String(accessToken))
+    safeSetItem(STORAGE_KEYS.GOOGLE_ACCESS_TOKEN, token)
     safeSetItem(
         STORAGE_KEYS.GOOGLE_ACCESS_TOKEN_EXPIRES_AT,
-        String(expiresAt)
+        String(safeExpiresAt)
     )
 
     if (email) {
-        safeSetItem(STORAGE_KEYS.GOOGLE_CONNECTED_EMAIL, String(email))
+        safeSetItem(STORAGE_KEYS.GOOGLE_CONNECTED_EMAIL, String(email).trim())
     }
 }
 
@@ -5181,15 +5281,37 @@ export function getGoogleConnectedEmail() {
     return value ? String(value).trim() : ''
 }
 
-export function isGoogleSessionActive() {
-    const token = getGoogleAccessToken()
+export function getGoogleSessionSnapshot() {
+    const accessToken = getGoogleAccessToken()
     const expiresAt = getGoogleAccessTokenExpiresAt()
+    const email = getGoogleConnectedEmail()
+    const now = Date.now()
 
-    if (!token || !expiresAt) {
-        return false
+    const hasToken = Boolean(accessToken)
+    const hasExpiry = Number.isFinite(expiresAt) && expiresAt > 0
+    const expiresInMs = hasExpiry ? expiresAt - now : 0
+    const active = hasToken && hasExpiry && expiresInMs > SESSION_EXPIRY_SKEW_MS
+    const expired = !active && hasToken && hasExpiry && expiresInMs <= SESSION_EXPIRY_SKEW_MS
+
+    return {
+        accessToken,
+        expiresAt,
+        email,
+        hasToken,
+        hasExpiry,
+        active,
+        expired,
+        expiresInMs
     }
+}
 
-    return Date.now() < expiresAt
+export function isGoogleSessionActive() {
+    return getGoogleSessionSnapshot().active
+}
+
+export function hasStoredGoogleSession() {
+    const snapshot = getGoogleSessionSnapshot()
+    return Boolean(snapshot.hasToken || snapshot.email || snapshot.hasExpiry)
 }
 
 export function clearGoogleSession() {
@@ -5299,7 +5421,7 @@ function ensureGoogleClientId() {
     return clientId
 }
 
-function loadGoogleIdentityScript() {
+export function loadGoogleIdentityScript() {
     if (googleScriptPromise) {
         return googleScriptPromise
     }
@@ -5315,6 +5437,11 @@ function loadGoogleIdentityScript() {
         )
 
         if (existing) {
+            if (window.google?.accounts?.oauth2) {
+                resolve()
+                return
+            }
+
             existing.addEventListener('load', () => resolve(), { once: true })
             existing.addEventListener(
                 'error',
@@ -5338,7 +5465,7 @@ function loadGoogleIdentityScript() {
     return googleScriptPromise
 }
 
-function requestAccessTokenInteractive() {
+function requestGoogleAccessToken({ prompt = 'consent' } = {}) {
     return new Promise((resolve, reject) => {
         const clientId = ensureGoogleClientId()
 
@@ -5347,17 +5474,21 @@ function requestAccessTokenInteractive() {
             return
         }
 
+        let settled = false
+
         const tokenClient = window.google.accounts.oauth2.initTokenClient({
             client_id: clientId,
             scope: GOOGLE_CALENDAR_SCOPE,
-            prompt: 'consent',
             callback: (response) => {
+                if (settled) return
+                settled = true
+
                 if (!response || response.error) {
                     reject(
                         new Error(
                             response?.error_description ||
-                            response?.error ||
-                            'Google no devolvió un token válido.'
+                                response?.error ||
+                                'Google no devolvió un token válido.'
                         )
                     )
                     return
@@ -5366,7 +5497,11 @@ function requestAccessTokenInteractive() {
                 const accessToken = String(response.access_token || '').trim()
                 const expiresInSeconds = Number(response.expires_in || 0)
 
-                if (!accessToken || !Number.isFinite(expiresInSeconds) || expiresInSeconds <= 0) {
+                if (
+                    !accessToken ||
+                    !Number.isFinite(expiresInSeconds) ||
+                    expiresInSeconds <= 0
+                ) {
                     reject(new Error('Google devolvió un token inválido.'))
                     return
                 }
@@ -5378,11 +5513,29 @@ function requestAccessTokenInteractive() {
             }
         })
 
-        tokenClient.requestAccessToken()
+        try {
+            tokenClient.requestAccessToken({ prompt })
+        } catch (error) {
+            reject(
+                error instanceof Error
+                    ? error
+                    : new Error('No se pudo solicitar el token de Google.')
+            )
+        }
     })
 }
 
-async function fetchGoogleJson(url, accessToken) {
+export async function requestAccessTokenInteractive() {
+    await loadGoogleIdentityScript()
+    return requestGoogleAccessToken({ prompt: 'consent' })
+}
+
+export async function requestAccessTokenSilently() {
+    await loadGoogleIdentityScript()
+    return requestGoogleAccessToken({ prompt: '' })
+}
+
+export async function fetchGoogleJson(url, accessToken) {
     const res = await fetch(url, {
         headers: {
             Authorization: `Bearer ${accessToken}`
@@ -5418,23 +5571,23 @@ async function fetchGoogleJson(url, accessToken) {
     return res.json()
 }
 
-export async function ensureGoogleCalendarConnection() {
-    await loadGoogleIdentityScript()
-
-    const session = await requestAccessTokenInteractive()
-
-    let email = ''
-
+async function fetchGoogleUserEmail(accessToken) {
     try {
         const me = await fetchGoogleJson(
             'https://www.googleapis.com/oauth2/v2/userinfo',
-            session.accessToken
+            accessToken
         )
 
-        email = String(me?.email || '').trim()
+        return String(me?.email || '').trim()
     } catch (error) {
         console.error('No se pudo obtener el email del usuario Google:', error)
+        return ''
     }
+}
+
+export async function ensureGoogleCalendarConnection() {
+    const session = await requestAccessTokenInteractive()
+    const email = await fetchGoogleUserEmail(session.accessToken)
 
     saveGoogleSession({
         accessToken: session.accessToken,
@@ -5463,20 +5616,23 @@ export async function listAccessibleCalendars() {
 
     return Array.isArray(json?.items)
         ? json.items.map((item) => ({
-            id: String(item.id || '').trim(),
-            summary: String(item.summary || '').trim(),
-            description: String(item.description || '').trim(),
-            timeZone: String(item.timeZone || '').trim(),
-            primary: Boolean(item.primary),
-            accessRole: String(item.accessRole || '').trim(),
-            backgroundColor: String(item.backgroundColor || '').trim(),
-            foregroundColor: String(item.foregroundColor || '').trim()
-        }))
+              id: String(item.id || '').trim(),
+              summary: String(item.summary || '').trim(),
+              description: String(item.description || '').trim(),
+              timeZone: String(item.timeZone || '').trim(),
+              primary: Boolean(item.primary),
+              accessRole: String(item.accessRole || '').trim(),
+              backgroundColor: String(item.backgroundColor || '').trim(),
+              foregroundColor: String(item.foregroundColor || '').trim()
+          }))
         : []
 }
 
 export async function connectAndFetchCalendars() {
-    await ensureGoogleCalendarConnection()
+    if (!isGoogleSessionActive()) {
+        await ensureGoogleCalendarConnection()
+    }
+
     return listAccessibleCalendars()
 }
 
@@ -5705,6 +5861,108 @@ export {
     deleteEvento,
     importIcs,
     downloadAllEventosIcs
+}// src/services/googleSessionBootstrapService.js
+
+import {
+    clearGoogleSession,
+    getAssignedCalendar,
+    getGoogleSessionSnapshot,
+    hasAssignedCalendar,
+    hasStoredGoogleSession,
+    saveGoogleSession
+} from './calendarConfigStorageService'
+import {
+    fetchGoogleJson,
+    loadGoogleIdentityScript,
+    requestAccessTokenSilently
+} from './googleCalendarConnectionService'
+
+async function fetchGoogleUserEmail(accessToken) {
+    try {
+        const me = await fetchGoogleJson(
+            'https://www.googleapis.com/oauth2/v2/userinfo',
+            accessToken
+        )
+
+        return String(me?.email || '').trim()
+    } catch (error) {
+        console.error('No se pudo obtener el email del usuario Google:', error)
+        return ''
+    }
+}
+
+function buildIdleResult() {
+    return {
+        status: 'idle',
+        restored: false,
+        needsReconnect: false,
+        message: ''
+    }
+}
+
+function buildActiveResult() {
+    return {
+        status: 'active',
+        restored: true,
+        needsReconnect: false,
+        message: ''
+    }
+}
+
+function buildRefreshedResult() {
+    return {
+        status: 'refreshed',
+        restored: true,
+        needsReconnect: false,
+        message: ''
+    }
+}
+
+function buildReconnectResult() {
+    const assignedCalendar = getAssignedCalendar()
+
+    return {
+        status: 'needs_reconnect',
+        restored: false,
+        needsReconnect: true,
+        message: assignedCalendar?.id
+            ? 'La sesión de Google expiró y no pudo restaurarse automáticamente. Debes reconectar Google.'
+            : 'Debes conectar Google para continuar.'
+    }
+}
+
+export async function bootstrapGoogleCalendarSession() {
+    const snapshot = getGoogleSessionSnapshot()
+
+    if (snapshot.active) {
+        return buildActiveResult()
+    }
+
+    const hasPreviousGoogleContext = hasStoredGoogleSession() || hasAssignedCalendar()
+
+    if (!hasPreviousGoogleContext) {
+        return buildIdleResult()
+    }
+
+    try {
+        await loadGoogleIdentityScript()
+
+        const session = await requestAccessTokenSilently()
+        const email =
+            snapshot.email || (await fetchGoogleUserEmail(session.accessToken))
+
+        saveGoogleSession({
+            accessToken: session.accessToken,
+            expiresAt: session.expiresAt,
+            email
+        })
+
+        return buildRefreshedResult()
+    } catch (error) {
+        console.error('No se pudo restaurar la sesión Google automáticamente:', error)
+        clearGoogleSession()
+        return buildReconnectResult()
+    }
 }// src/services/authService.js
 
 import { STORAGE_KEYS } from '../constants/storageKeys'

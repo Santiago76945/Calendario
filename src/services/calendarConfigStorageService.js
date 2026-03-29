@@ -36,6 +36,7 @@ export function saveGoogleSession({
 }) {
     const token = String(accessToken || '').trim()
     const safeExpiresAt = Number(expiresAt || 0)
+    const safeEmail = String(email || '').trim()
 
     if (!token || !Number.isFinite(safeExpiresAt) || safeExpiresAt <= 0) {
         throw new Error('Falta información válida de sesión de Google.')
@@ -47,8 +48,10 @@ export function saveGoogleSession({
         String(safeExpiresAt)
     )
 
-    if (email) {
-        safeSetItem(STORAGE_KEYS.GOOGLE_CONNECTED_EMAIL, String(email).trim())
+    if (safeEmail) {
+        safeSetItem(STORAGE_KEYS.GOOGLE_CONNECTED_EMAIL, safeEmail)
+    } else {
+        safeRemoveItem(STORAGE_KEYS.GOOGLE_CONNECTED_EMAIL)
     }
 }
 
@@ -76,9 +79,23 @@ export function getGoogleSessionSnapshot() {
 
     const hasToken = Boolean(accessToken)
     const hasExpiry = Number.isFinite(expiresAt) && expiresAt > 0
+    const hasEmail = Boolean(email)
+
     const expiresInMs = hasExpiry ? expiresAt - now : 0
     const active = hasToken && hasExpiry && expiresInMs > SESSION_EXPIRY_SKEW_MS
-    const expired = !active && hasToken && hasExpiry && expiresInMs <= SESSION_EXPIRY_SKEW_MS
+    const expired =
+        hasToken && hasExpiry && expiresInMs <= SESSION_EXPIRY_SKEW_MS
+    const hasStoredContext = hasToken || hasExpiry || hasEmail
+
+    let status = 'idle'
+
+    if (active) {
+        status = 'active'
+    } else if (expired) {
+        status = 'expired'
+    } else if (hasStoredContext) {
+        status = 'stored'
+    }
 
     return {
         accessToken,
@@ -86,9 +103,12 @@ export function getGoogleSessionSnapshot() {
         email,
         hasToken,
         hasExpiry,
+        hasEmail,
+        hasStoredContext,
         active,
         expired,
-        expiresInMs
+        expiresInMs,
+        status
     }
 }
 
@@ -97,14 +117,18 @@ export function isGoogleSessionActive() {
 }
 
 export function hasStoredGoogleSession() {
-    const snapshot = getGoogleSessionSnapshot()
-    return Boolean(snapshot.hasToken || snapshot.email || snapshot.hasExpiry)
+    return getGoogleSessionSnapshot().hasStoredContext
 }
 
-export function clearGoogleSession() {
+export function clearGoogleSession(options = {}) {
+    const preserveEmail = Boolean(options?.preserveEmail)
+
     safeRemoveItem(STORAGE_KEYS.GOOGLE_ACCESS_TOKEN)
     safeRemoveItem(STORAGE_KEYS.GOOGLE_ACCESS_TOKEN_EXPIRES_AT)
-    safeRemoveItem(STORAGE_KEYS.GOOGLE_CONNECTED_EMAIL)
+
+    if (!preserveEmail) {
+        safeRemoveItem(STORAGE_KEYS.GOOGLE_CONNECTED_EMAIL)
+    }
 }
 
 export function saveAssignedCalendar(calendar) {

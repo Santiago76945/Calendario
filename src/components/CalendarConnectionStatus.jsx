@@ -4,9 +4,9 @@ import React from 'react'
 import AssignCalendarButton from './AssignCalendarButton'
 import {
     getAssignedCalendar,
-    hasAssignedCalendar,
-    isGoogleSessionActive,
-    getGoogleConnectedEmail
+    getGoogleConnectedEmail,
+    getGoogleSessionSnapshot,
+    hasAssignedCalendar
 } from '../services/calendarConfigStorageService'
 import { disconnectGoogleCalendar } from '../services/googleCalendarConnectionService'
 
@@ -16,7 +16,9 @@ export default function CalendarConnectionStatus({
     onCalendarAssigned,
     onConnectionCleared
 }) {
-    const connected = isGoogleSessionActive()
+    const sessionSnapshot = getGoogleSessionSnapshot()
+    const connected = sessionSnapshot.active
+    const expired = sessionSnapshot.expired
     const assigned = getAssignedCalendar()
     const email = getGoogleConnectedEmail()
 
@@ -41,7 +43,35 @@ export default function CalendarConnectionStatus({
             return 'Activa'
         }
 
+        if (expired) {
+            return 'Expirada'
+        }
+
+        if (sessionSnapshot.hasStoredContext) {
+            return 'Inactiva'
+        }
+
         return 'No conectada'
+    }
+
+    function getHelpText() {
+        if (checkingSession) {
+            return ''
+        }
+
+        if (connected) {
+            return ''
+        }
+
+        if (expired && hasAssignedCalendar()) {
+            return 'Tu calendario asignado sigue guardado. Solo necesitas reconectar Google.'
+        }
+
+        if (hasAssignedCalendar()) {
+            return 'Tu calendario asignado sigue guardado localmente.'
+        }
+
+        return ''
     }
 
     return (
@@ -81,6 +111,18 @@ export default function CalendarConnectionStatus({
                 </p>
             ) : null}
 
+            {getHelpText() ? (
+                <p
+                    style={{
+                        margin: '0.75rem 0 0',
+                        color: '#92400e',
+                        lineHeight: 1.65
+                    }}
+                >
+                    {getHelpText()}
+                </p>
+            ) : null}
+
             {sessionRestoreMessage ? (
                 <p
                     style={{
@@ -109,7 +151,7 @@ export default function CalendarConnectionStatus({
                     onCalendarAssigned={onCalendarAssigned}
                 />
 
-                {(connected || hasAssignedCalendar()) && (
+                {(connected || expired || hasAssignedCalendar()) && (
                     <button
                         type="button"
                         className="button-secondary"

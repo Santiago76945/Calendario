@@ -46,25 +46,57 @@ function buildActiveResult() {
     }
 }
 
-function buildRefreshedResult() {
+function buildRefreshedResult({ assignedCalendar, email }) {
+    if (assignedCalendar?.id) {
+        return {
+            status: 'refreshed',
+            restored: true,
+            needsReconnect: false,
+            message: email
+                ? `Se restauró la sesión de Google para ${email} y se mantuvo el calendario asignado.`
+                : 'Se restauró la sesión de Google y se mantuvo el calendario asignado.'
+        }
+    }
+
     return {
         status: 'refreshed',
         restored: true,
         needsReconnect: false,
-        message: ''
+        message: email
+            ? `Se restauró la sesión de Google para ${email}.`
+            : 'Se restauró la sesión de Google.'
     }
 }
 
-function buildReconnectResult() {
+function buildReconnectResult(snapshot) {
     const assignedCalendar = getAssignedCalendar()
+    const email = String(snapshot?.email || '').trim()
+
+    if (assignedCalendar?.id) {
+        return {
+            status: 'needs_reconnect',
+            restored: false,
+            needsReconnect: true,
+            message: email
+                ? `La sesión de Google de ${email} ya no está activa. El calendario asignado sigue guardado, pero debes reconectar Google para seguir usándolo.`
+                : 'La sesión de Google ya no está activa. El calendario asignado sigue guardado, pero debes reconectar Google para seguir usándolo.'
+        }
+    }
+
+    if (email) {
+        return {
+            status: 'needs_reconnect',
+            restored: false,
+            needsReconnect: true,
+            message: `La sesión de Google de ${email} ya no está activa. Debes reconectar Google para continuar.`
+        }
+    }
 
     return {
         status: 'needs_reconnect',
         restored: false,
         needsReconnect: true,
-        message: assignedCalendar?.id
-            ? 'La sesión de Google expiró y no pudo restaurarse automáticamente. Debes reconectar Google.'
-            : 'Debes conectar Google para continuar.'
+        message: 'Debes conectar Google para continuar.'
     }
 }
 
@@ -75,7 +107,8 @@ export async function bootstrapGoogleCalendarSession() {
         return buildActiveResult()
     }
 
-    const hasPreviousGoogleContext = hasStoredGoogleSession() || hasAssignedCalendar()
+    const hasPreviousGoogleContext =
+        hasStoredGoogleSession() || hasAssignedCalendar()
 
     if (!hasPreviousGoogleContext) {
         return buildIdleResult()
@@ -87,6 +120,7 @@ export async function bootstrapGoogleCalendarSession() {
         const session = await requestAccessTokenSilently()
         const email =
             snapshot.email || (await fetchGoogleUserEmail(session.accessToken))
+        const assignedCalendar = getAssignedCalendar()
 
         saveGoogleSession({
             accessToken: session.accessToken,
@@ -94,10 +128,20 @@ export async function bootstrapGoogleCalendarSession() {
             email
         })
 
-        return buildRefreshedResult()
+        return buildRefreshedResult({
+            assignedCalendar,
+            email
+        })
     } catch (error) {
-        console.error('No se pudo restaurar la sesión Google automáticamente:', error)
-        clearGoogleSession()
-        return buildReconnectResult()
+        console.error(
+            'No se pudo restaurar la sesión Google automáticamente:',
+            error
+        )
+
+        clearGoogleSession({
+            preserveEmail: Boolean(snapshot.email)
+        })
+
+        return buildReconnectResult(snapshot)
     }
 }

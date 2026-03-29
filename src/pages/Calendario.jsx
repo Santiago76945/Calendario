@@ -15,8 +15,8 @@ import {
 } from '../services/icsService'
 import {
     getAssignedCalendar,
-    hasAssignedCalendar,
-    isGoogleSessionActive
+    getGoogleSessionSnapshot,
+    hasAssignedCalendar
 } from '../services/calendarConfigStorageService'
 import { bootstrapGoogleCalendarSession } from '../services/googleSessionBootstrapService'
 import '../styles/calendario.css'
@@ -53,7 +53,9 @@ export default function Calendario() {
     const [hasNextPage, setHasNextPage] = useState(false)
     const [totalKnownPages, setTotalKnownPages] = useState(1)
 
-    const sessionActive = isGoogleSessionActive()
+    const googleSessionSnapshot = getGoogleSessionSnapshot()
+    const sessionActive = googleSessionSnapshot.active
+    const sessionExpired = googleSessionSnapshot.expired
     const assignedCalendar = getAssignedCalendar()
     const hasCalendarAssigned = hasAssignedCalendar()
     const readyToUseCalendar =
@@ -132,8 +134,16 @@ export default function Calendario() {
             return 'Restaurando sesión de Google...'
         }
 
+        if (sessionExpired && hasCalendarAssigned) {
+            return 'La sesión de Google expiró. Tu calendario asignado sigue guardado, pero debes reconectar Google para seguir usándolo.'
+        }
+
         if (!sessionActive && hasCalendarAssigned) {
-            return 'La sesión de Google no está activa. Debes reconectar Google para usar el calendario asignado.'
+            return 'El calendario asignado sigue guardado, pero la sesión de Google no está activa. Debes reconectar Google para usarlo.'
+        }
+
+        if (sessionExpired) {
+            return 'La sesión de Google expiró. Debes reconectar Google.'
         }
 
         if (!sessionActive) {
