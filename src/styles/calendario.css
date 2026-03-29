@@ -675,3 +675,17 @@
         padding: 0.85rem;
     }
 }
+
+.event-form-field input[type='date'],
+.event-form-field input[type='time'] {
+    min-width: 0;
+    max-width: 100%;
+}
+
+@media (max-width: 768px) {
+    .event-form-field input[type='date'],
+    .event-form-field input[type='time'] {
+        width: 100%;
+        min-width: 0;
+    }
+}
